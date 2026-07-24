@@ -406,7 +406,18 @@ const DEFAULT_USERS = [
   {id:'DB', name:'Dora Bobadilla', pass:'ornopsdb', role:'editor', position:'Operations Exec', phone:'', email:'dora.b@nexusdmc.com', company:'ORN Australia', country:'Australia'},
   {id:'MU', name:'MS Muskan', pass:'ornopsmu', role:'editor', position:'Operations Exec', phone:'+61 474 884 169', email:'muskan@tripfactory.com', company:'ORN Australia', country:'Australia'},
   {id:'DS', name:'Deepa Srivastava', pass:'ornopsds', role:'editor', position:'Operations Exec', phone:'+61 403 199 959', email:'deepa.s@tripfactory.com', company:'ORN Australia', country:'Australia'},
-  {id:'HK', name:'Harish K', pass:'ornopshk', role:'editor', position:'Operations Exec', phone:'+61 431 298 566', email:'harish.k@nexusdmc.com', company:'ORN Australia', country:'Australia'}
+  {id:'HK', name:'Harish K', pass:'ornopshk', role:'editor', position:'Operations Exec', phone:'+61 431 298 566', email:'harish.k@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'YK', name:'Yukti Kumar', pass:'ornopsyk', role:'editor', position:'', phone:'', email:'yukti.kumar@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'DV', name:'Dhruv Soni', pass:'ornopsdv', role:'editor', position:'', phone:'', email:'dhruv.soni@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'GM', name:'Gemma Martin', pass:'ornopsgm', role:'editor', position:'', phone:'', email:'gemma.martin@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'AM', name:'Amey', pass:'ornopsam', role:'editor', position:'', phone:'', email:'', company:'ORN Australia', country:'Australia'},
+  {id:'SK', name:'Sherine Naomi Kizawa', pass:'ornopssk', role:'editor', position:'Operations Exec', phone:'', email:'sherine.n@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'AZ', name:'Alvin Ko Zin', pass:'ornopsaz', role:'editor', position:'Operations Exec', phone:'', email:'alvin.kz@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'NR', name:'Nishi Ranasinghe', pass:'ornopsnr', role:'editor', position:'Operations Exec', phone:'', email:'nishi.r@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'SC', name:'Stef Ciefanny', pass:'ornopssc', role:'editor', position:'Operations Exec', phone:'', email:'stef.c@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'NS', name:'Nisha Sareen', pass:'ornopsns', role:'editor', position:'Operations Exec', phone:'', email:'nisha.s@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'JT', name:'Janelle Tolentino', pass:'ornopsjt', role:'editor', position:'Operations Exec', phone:'', email:'janelle.tolentino@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'MC', name:'Milena Cristina', pass:'ornopsmc', role:'editor', position:'Operations Exec', phone:'', email:'milena.c@nexusdmc.com', company:'ORN Australia', country:'Australia'}
 ];
 const DEFAULT_FX = { EUR:1, USD:0.86, AUD:0.57, GBP:1.17, CHF:1.06, INR:0.0100 };
 const STATUSES = ['Pending','Confirmed','Reconfirmed','Cancelled','Issue'];
@@ -3549,7 +3560,7 @@ function renderFleet(){
 }
 
 /* ================= FINANCE (gated · ORNHISTORY) ================= */
-const FIN_USERS = ['AK','SN','RK'];
+const FIN_USERS = ['AK','SN','RK','YK','HK','GM','DV','AM'];
 function finAllowed(){ return !!(state.user && FIN_USERS.includes(state.user.id)); }
 function finUnlocked(){ return finAllowed(); }
 function tryUnlockFinance(){
