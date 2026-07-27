@@ -357,6 +357,8 @@ html.sso body::before{content:'Signing you in\2026';position:fixed;inset:0;displ
       <div class="view" id="view-directory"></div>
       <div class="view" id="view-rail"></div>
       <div class="view" id="view-groups"></div>
+      <div class="view" id="view-newbookings"></div>
+      <div class="view" id="view-sixpoint"></div>
       <div class="view" id="view-help"></div>
       <div class="view" id="view-activity"></div>
       <div class="view" id="view-settings"></div>
@@ -395,29 +397,22 @@ const SEED_EXTRA = {"refunds": [{"fileNo": "TAG00Z7DSJX", "amount": "480 EUR", "
 
 /* ---- DEFAULTS ---- */
 const DEFAULT_USERS = [
-  {id:'AK', name:'Ajay Kawa', pass:'ornopsak', role:'admin', position:'CEO', phone:'07810 778 794', email:'ajay.kawa@orn.com', company:'ORN Europe', country:'UK'},
-  {id:'KN', name:'Ken Newton', pass:'ornopskn', role:'editor', position:'Commercial Manager', phone:'07984 3511117', email:'ken.newton@orn.com', company:'ORN Europe', country:'UK'},
-  {id:'CT', name:'Clinton Thomas', pass:'ornopsct', role:'editor', position:'Operations Exec', phone:'+91 789 979 3779', email:'clinton@nexusdmc.com', company:'ORN Europe', country:'UK'},
-  {id:'MZ', name:'Marta Zizkova', pass:'ornopsmz', role:'editor', position:'', phone:'', email:'', company:'ORN Europe', country:'UK'},
-  {id:'SN', name:'Sahil Nijhawan', pass:'ornopssn', role:'editor', position:'CEO Australia', phone:'', email:'', company:'ORN Australia', country:'Australia'},
-  {id:'SS', name:'Suman Sethi', pass:'ornopsss', role:'editor', position:'', phone:'', email:'', company:'', country:''},
-  {id:'RK', name:'Raj Kumar', pass:'ornopsrk', role:'editor', position:'Group COO', phone:'', email:'', company:'ORN Holdings', country:''},
-  {id:'MS', name:'Manish Suchde', pass:'ornopsms', role:'editor', position:'Global DMC & API', phone:'', email:'', company:'', country:''},
-  {id:'DB', name:'Dora Bobadilla', pass:'ornopsdb', role:'editor', position:'Operations Exec', phone:'', email:'dora.b@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'MU', name:'MS Muskan', pass:'ornopsmu', role:'editor', position:'Operations Exec', phone:'+61 474 884 169', email:'muskan@tripfactory.com', company:'ORN Australia', country:'Australia'},
-  {id:'DS', name:'Deepa Srivastava', pass:'ornopsds', role:'editor', position:'Operations Exec', phone:'+61 403 199 959', email:'deepa.s@tripfactory.com', company:'ORN Australia', country:'Australia'},
-  {id:'HK', name:'Harish K', pass:'ornopshk', role:'editor', position:'Operations Exec', phone:'+61 431 298 566', email:'harish.k@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'YK', name:'Yukti Kumar', pass:'ornopsyk', role:'editor', position:'', phone:'', email:'yukti.kumar@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'DV', name:'Dhruv Soni', pass:'ornopsdv', role:'editor', position:'', phone:'', email:'dhruv.soni@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'GM', name:'Gemma Martin', pass:'ornopsgm', role:'editor', position:'', phone:'', email:'gemma.martin@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'AM', name:'Amey', pass:'ornopsam', role:'editor', position:'', phone:'', email:'', company:'ORN Australia', country:'Australia'},
-  {id:'SK', name:'Sherine Naomi Kizawa', pass:'ornopssk', role:'editor', position:'Operations Exec', phone:'', email:'sherine.n@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'AZ', name:'Alvin Ko Zin', pass:'ornopsaz', role:'editor', position:'Operations Exec', phone:'', email:'alvin.kz@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'NR', name:'Nishi Ranasinghe', pass:'ornopsnr', role:'editor', position:'Operations Exec', phone:'', email:'nishi.r@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'SC', name:'Stef Ciefanny', pass:'ornopssc', role:'editor', position:'Operations Exec', phone:'', email:'stef.c@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'NS', name:'Nisha Sareen', pass:'ornopsns', role:'editor', position:'Operations Exec', phone:'', email:'nisha.s@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'JT', name:'Janelle Tolentino', pass:'ornopsjt', role:'editor', position:'Operations Exec', phone:'', email:'janelle.tolentino@nexusdmc.com', company:'ORN Australia', country:'Australia'},
-  {id:'MC', name:'Milena Cristina', pass:'ornopsmc', role:'editor', position:'Operations Exec', phone:'', email:'milena.c@nexusdmc.com', company:'ORN Australia', country:'Australia'}
+  {id:'AK', name:'Ajay Kawa', pass:'ornopsak', role:'admin', position:'CCO', phone:'07810 778 794', email:'ajay.kawa@orn.com', company:'ORN UK & EU', country:'UK'},
+  {id:'KN', name:'Ken Newton', pass:'ornopskn', role:'editor', position:'Commercial Manager', phone:'07984 3511117', email:'ken.newton@orn.com', company:'ORN UK & EU', country:'UK'},
+  {id:'TM', name:'Timothy', pass:'ornopstm', role:'editor', position:'', phone:'', email:'', company:'ORN UK & EU', country:'UK'},
+  {id:'SN', name:'Sahil Nijhawan', pass:'ornopssn', role:'editor', position:'CEO Australia', phone:'', email:'sahil.n@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'SS', name:'Suman Sethi', pass:'ornopsss', role:'editor', position:'', phone:'', email:'', company:'ORN India Europe', country:''},
+  {id:'MC', name:'Milena Cristina', pass:'ornopsmc', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'milena.c@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'DB', name:'Dora Bobadilla', pass:'ornopsdb', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'dora.b@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'HK', name:'Harish Kumar', pass:'ornopshk', role:'editor', restricted:true, position:'Operations Exec', phone:'+61 431 298 566', email:'harish.k@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'MU', name:'Ms Muskan', pass:'ornopsmu', role:'editor', restricted:true, position:'Operations Exec', phone:'+61 474 884 169', email:'muskan@tripfactory.com', company:'ORN Australia', country:'Australia'},
+  {id:'AZ', name:'Alvin Ko Zin', pass:'ornopsaz', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'alvin.kz@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'NR', name:'Nishi Ranasinghe', pass:'ornopsnr', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'nishi.r@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'NS', name:'Nisha Sareen', pass:'ornopsns', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'nisha.s@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'SC', name:'Stef Ciefanny', pass:'ornopssc', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'stef.c@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'GM', name:'Gemma Martin', pass:'ornopsgm', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'gemma.martin@nexusdmc.com', company:'ORN Australia', country:'Australia'},
+  {id:'VD', name:'Vaibhavi Dhakorkar', pass:'ornopsvd', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'', company:'ORN Australia', country:'Australia'},
+  {id:'SK', name:'Sherine Naomi Kizawa', pass:'ornopssk', role:'editor', restricted:true, position:'Operations Exec', phone:'', email:'sherine.n@nexusdmc.com', company:'ORN Australia', country:'Australia'}
 ];
 const DEFAULT_FX = { EUR:1, USD:0.86, AUD:0.57, GBP:1.17, CHF:1.06, INR:0.0100 };
 const STATUSES = ['Pending','Confirmed','Reconfirmed','Cancelled','Issue'];
@@ -551,6 +546,9 @@ function mergeDefaultUsers(){
       ['position','phone','email','company','country'].forEach(k=>{
         if (du[k] && !ex[k]){ ex[k]=du[k]; changed=true; }
       });
+      // access model is authoritative from DEFAULT_USERS — keep restricted flag & role in sync
+      if (du.role && ex.role!==du.role){ ex.role=du.role; changed=true; }
+      if (!!ex.restricted !== !!du.restricted){ ex.restricted = !!du.restricted; changed=true; }
     }
   });
   if (changed) saveUsers();
@@ -946,6 +944,8 @@ function renderSidebar(){
     <button class="nv ${currentView==='hotels'?'active':''}" onclick="switchView('hotels')"><span>Hotels (Europe)</span><span class="cnt">${state.hotels.length}</span></button>
     <button class="nv ${currentView==='guestchats'?'active':''}" onclick="switchView('guestchats')"><span>Guest chats</span><span class="cnt" ${state.guestchats.filter(gcUnread).length?'style="background:var(--danger);color:#fff"':''}>${state.guestchats.filter(c=>c.status!=='Closed').length}</span></button>
     <button class="nv ${currentView==='messages'?'active':''}" onclick="switchView('messages')"><span>Messages</span><span class="cnt" ${state.tickets.filter(t=>t.status==='Open').length?'style="background:var(--danger);color:#fff"':''}>${state.tickets.filter(t=>t.status!=='Resolved').length}</span></button>
+    <button class="nv ${currentView==='newbookings'?'active':''}" onclick="switchView('newbookings')"><span>New bookings</span><span class="cnt" ${newAusBookings().length?'style="background:var(--danger);color:#fff"':''}>${newAusBookings().length}</span></button>
+    <button class="nv ${currentView==='sixpoint'?'active':''}" onclick="switchView('sixpoint')"><span>6-point confirmed</span><span class="cnt">${sixPointReadyBookings().length}</span></button>
     <button class="nv ${currentView==='cards'?'active':''}" onclick="switchView('cards')"><span>Credit card payments</span><span class="cnt">${state.cards.length}</span></button>
     <button class="nv ${currentView==='refunds'?'active':''}" onclick="switchView('refunds')"><span>Refunds</span><span class="cnt">${pendRef} open</span></button>
     <button class="nv ${currentView==='directory'?'active':''}" onclick="switchView('directory')"><span>Suppliers 🔒</span><span class="cnt">${state.directory.length}</span></button>
@@ -988,12 +988,14 @@ function switchView(v){
   if (v==='directory') renderDirectory();
   if (v==='rail') renderRail();
   if (v==='groups') renderGroups();
+  if (v==='newbookings') renderNewBookings();
+  if (v==='sixpoint') renderSixPoint();
   if (v==='help') renderHelp();
   if (v==='activity') renderActivity();
   if (v==='settings') renderSettings();
   renderSidebar();
 }
-function renderAll(){ renderSidebar(); renderDashboard(); renderBookings(); renderGuestChats(); renderFleet(); renderAttractions(); renderFinance(); renderArrivals(); renderHotelsOps(); renderConfirmations(); renderMessages(); renderTeam(); renderTakeover(); renderCards(); renderRefunds(); renderDirectory(); renderRail(); renderGroups(); renderHelp(); renderActivity(); renderSettings(); }
+function renderAll(){ renderSidebar(); renderDashboard(); renderBookings(); renderGuestChats(); renderFleet(); renderAttractions(); renderFinance(); renderArrivals(); renderHotelsOps(); renderConfirmations(); renderMessages(); renderTeam(); renderTakeover(); renderCards(); renderRefunds(); renderDirectory(); renderRail(); renderGroups(); renderNewBookings(); renderSixPoint(); renderHelp(); renderActivity(); renderSettings(); }
 
 /* ================= DASHBOARD ================= */
 function renderDashboard(){
@@ -1372,6 +1374,19 @@ let openBookingId = null;
 let openCompSet = new Set();
 
 function getBooking(id){ return state.bookings.find(b=>b.id===id); }
+function newAusBookings(){ return state.bookings.filter(b=>b.newFromAus && !b.actioned); }
+function markBookingActioned(id){
+  const b = getBooking(id); if (!b) return;
+  b.actioned = true; b.actionedBy = state.user?state.user.id:'?'; b.actionedAt = new Date().toISOString();
+  saveBooking(b, 'New booking acknowledged — now in the daily workflow');
+}
+// A booking is ready for Australia to self-download once every active component has passed its 6-point check
+function sixPointBookingComplete(b){
+  const act = activeComps(b);
+  if (!act.length) return false;
+  return act.every(c=>sixPointComplete(c));
+}
+function sixPointReadyBookings(){ return state.bookings.filter(b=>sixPointBookingComplete(b)); }
 
 function openBooking(id){
   openBookingId = id;
@@ -1401,8 +1416,11 @@ function refreshBookingModal(){
         · last update ${esc(b.updatedBy||'—')} ${b.updatedAt? new Date(b.updatedAt).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'}):''}</div>
       </div>
       <span style="display:flex;gap:8px;align-items:flex-start">
-        <button class="btn ghost small" onclick="bookingSummary('${esc(b.id)}')">Booking summary (PDF)</button>
-        <button class="btn ghost small" onclick="emailSummary('${esc(b.id)}')">Email summary</button>
+        ${pdfAllowed()
+          ? `<button class="btn ghost small" onclick="bookingSummary('${esc(b.id)}')">Booking summary (PDF)</button>
+        <button class="btn ghost small" onclick="emailSummary('${esc(b.id)}')">Email summary</button>`
+          : `<button class="btn ghost small" disabled title="PDF & email are handled by the UK/EU team" style="opacity:.4;cursor:not-allowed">Booking summary (PDF)</button>
+        <button class="btn ghost small" disabled title="PDF & email are handled by the UK/EU team" style="opacity:.4;cursor:not-allowed">Email summary</button>`}
         <button class="close-x" onclick="closeModal()">✕</button>
       </span>
     </div>
@@ -1660,13 +1678,16 @@ function createBooking(){
   const fileNo = document.getElementById('nbFile').value.trim().toUpperCase();
   if (!fileNo){ document.getElementById('nbErr').textContent='File No is required.'; return; }
   if (state.bookings.some(b=>b.id===fileNo)){ document.getElementById('nbErr').textContent='A booking with this File No already exists.'; return; }
-  const b = seedToBooking({fileNo, source:document.getElementById('nbSource').value,
+  const src = document.getElementById('nbSource').value;
+  const b = seedToBooking({fileNo, source:src,
     contact:document.getElementById('nbContact').value.trim(),
     pax:document.getElementById('nbPax').value.trim(),
     attachedTrips:document.getElementById('nbAttached').value.trim(),
     tripStart:document.getElementById('nbStart').value, tripEnd:document.getElementById('nbStart').value,
     components:[], sheet:'manual'});
-  saveBooking(b, 'Booking created');
+  // Australia loads new bookings from Nexus — flag for the UK/EU team to pick up
+  if (src==='Australia'){ b.newFromAus = true; b.loadedBy = state.user?state.user.id:'?'; b.loadedAt = new Date().toISOString(); }
+  saveBooking(b, src==='Australia' ? 'New booking loaded from Australia (Nexus)' : 'Booking created');
   openBooking(fileNo);
 }
 
@@ -1836,6 +1857,54 @@ function delRail(id){
   if (!confirm('Delete this Rail Europe entry?')) return;
   deleteListItem('rail', id);
   logActivity('-', 'Rail Europe entry deleted');
+}
+
+/* ================= NEW BOOKINGS (loaded by Australia — UK/EU to action) ================= */
+function renderNewBookings(){
+  const el = document.getElementById('view-newbookings');
+  if (!el) return;
+  const rows = newAusBookings().slice().sort((a,z)=>(a.tripStart||'').localeCompare(z.tripStart||''));
+  el.innerHTML = `
+    <div class="flex-between" style="margin-bottom:6px">
+      <div><h2 class="vtitle">New bookings from Australia</h2>
+      <div class="vsub">${rows.length} awaiting first action · loaded from Nexus by the Australia team — Ken, Suman &amp; Timothy to review and confirm / reconfirm components</div></div>
+    </div>
+    ${rows.length? `<div class="tbl-scroll"><table class="bk static">
+      <thead><tr><th>File No</th><th>Pax</th><th>Trip start</th><th>Components</th><th>Loaded</th><th></th><th></th></tr></thead>
+      <tbody>${rows.map(b=>`<tr>
+        <td style="white-space:nowrap"><b>${esc(b.fileNo)}</b> <span class="pill-src ${esc(b.source)}">${esc(b.source)}</span></td>
+        <td>${esc(b.pax||'—')}</td>
+        <td style="white-space:nowrap">${fmtDate(b.tripStart)}</td>
+        <td>${b.components.length}</td>
+        <td style="white-space:nowrap">${b.loadedAt? new Date(b.loadedAt).toLocaleDateString('en-GB'):'—'} ${esc(b.loadedBy||'')}</td>
+        <td><button class="btn small" onclick="openBooking('${esc(b.id)}')">Open &amp; action</button></td>
+        <td><button class="btn ghost small" onclick="markBookingActioned('${esc(b.id)}')" title="Acknowledge — moves it into the daily workflow">Mark actioned</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty" style="padding:24px">Nothing new right now. When Australia loads a booking from Nexus it will appear here for the team to pick up.</div>'}`;
+}
+
+/* ================= 6-POINT CONFIRMED BOOKINGS (Australia self-serve download) ================= */
+function renderSixPoint(){
+  const el = document.getElementById('view-sixpoint');
+  if (!el) return;
+  const rows = sixPointReadyBookings().slice().sort((a,z)=>(a.tripStart||'').localeCompare(z.tripStart||''));
+  const restricted = isRestricted();
+  el.innerHTML = `
+    <div class="flex-between" style="margin-bottom:6px">
+      <div><h2 class="vtitle">6-point confirmed bookings</h2>
+      <div class="vsub">${rows.length} fully reconfirmed · every active component has passed its 6-point check. ${restricted? 'Download the confirmation document below and update Nexus.' : 'The UK/EU team signs these off; Australia can download the confirmation here.'}</div></div>
+    </div>
+    ${rows.length? `<div class="tbl-scroll"><table class="bk static">
+      <thead><tr><th>File No</th><th>Pax</th><th>Trip dates</th><th>Components</th><th>Confirmation</th></tr></thead>
+      <tbody>${rows.map(b=>`<tr>
+        <td style="white-space:nowrap"><b>${esc(b.fileNo)}</b> <span class="pill-src ${esc(b.source)}">${esc(b.source)}</span></td>
+        <td>${esc(b.pax||'—')}</td>
+        <td style="white-space:nowrap">${fmtDate(b.tripStart)} → ${fmtDate(b.tripEnd)}</td>
+        <td>${activeComps(b).length} <span class="var-pos">✓ all reconfirmed</span></td>
+        <td><button class="btn small" onclick="bookingSummary('${esc(b.id)}')">Download confirmation document</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="hint">The confirmation opens in a print-ready window — use Ctrl/Cmd + P → Save as PDF. This panel lists only bookings the UK/EU team has completed, so Australia can pull the document without waiting on an email.</div>` : '<div class="empty" style="padding:24px">No bookings have completed their full 6-point check yet. A booking appears here once every active component is reconfirmed.</div>'}`;
 }
 
 /* ================= GROUPS (group bookings tracker) ================= */
@@ -2660,6 +2729,7 @@ function bookingSummary(id){
 }
 
 function emailSummary(id){
+  if (isRestricted()){ alert('Email confirmations are completed by the UK/EU team once the 6-point check is signed off.'); return; }
   const b = getBooking(id);
   if (!b) return;
   const client = localStorage.getItem('ornrecon_mailclient');
@@ -3560,8 +3630,10 @@ function renderFleet(){
 }
 
 /* ================= FINANCE (gated · ORNHISTORY) ================= */
-const FIN_USERS = ['AK','SN','RK','YK','HK','GM','DV','AM'];
+const FIN_USERS = ['AK','KN','TM','SN','SS'];
 function finAllowed(){ return !!(state.user && FIN_USERS.includes(state.user.id)); }
+function isRestricted(){ return !!(state.user && state.user.restricted); }
+function pdfAllowed(){ return !isRestricted(); }
 function finUnlocked(){ return finAllowed(); }
 function tryUnlockFinance(){
   if (finAllowed()) return true;
