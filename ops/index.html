@@ -2670,76 +2670,83 @@ function bookingSummary(id){
   const act = activeComps(b);
   const allSix = act.length>0 && act.every(c=>sixPointComplete(c));
 
-  const SIX = [['operator','Operator / supplier'],['phone','Contact number'],['confirmation','Confirmation ref'],['time','Time'],['location','Pick-up / meeting point']];
-  const tickRow = (sp, key, label) => {
+  // the six checks, in column order (Notes is optional and shown under the row)
+  const COLS = [['operator','Operator'],['phone','Phone'],['confirmation','Confirmation'],['time','Time'],['location','Location']];
+  const cell = (sp, key) => {
     const val = (sp && sp[key]) ? String(sp[key]) : '';
-    const done = !!val;
-    return `<div class="six-item ${done?'done':'todo'}">
-      <span class="tick">${done?'\u2713':'\u25CB'}</span>
-      <span class="six-l">${label}</span>
-      <span class="six-v">${esc(val||'\u2014')}</span></div>`;
+    return val
+      ? `<td class="tk done" title="${esc(val)}"><span class="mk">\u2713</span><span class="cv">${esc(val)}</span></td>`
+      : `<td class="tk todo"><span class="mk">\u25CB</span></td>`;
   };
 
-  const compCard = (c, idx) => {
+  const row = (c, idx) => {
     const sp = c.sixPoint||{};
     const ok = sixPointComplete(c);
     const cancelled = c.status==='Cancelled';
-    return `<div class="voucher-item ${cancelled?'cx':''}">
-      <div class="vi-head">
-        <div class="vi-when">${fmtDate(c.travelDate)}${c.pickupTime?` \u00B7 <b>${esc(c.pickupTime)}</b>`:''}</div>
-        <div class="vi-badge ${ok?'ok':(cancelled?'cx':'no')}">${ok?'\u2713 6-point confirmed':(cancelled?'Cancelled':'Pending reconfirmation')}</div>
-      </div>
-      <div class="vi-title">${esc(c.activity||c.service||'Service')}</div>
-      <div class="vi-meta">${esc(c.service||'')}${c.bookingRef?` \u00B7 Ref <b>${esc(c.bookingRef)}</b>`:''}</div>
-      ${cancelled ? '' : `<div class="six-grid">
-        ${SIX.map(([k,l])=>tickRow(sp,k,l)).join('')}
-        ${sp.notes?`<div class="six-item done"><span class="tick">\u2713</span><span class="six-l">Notes</span><span class="six-v">${esc(sp.notes)}</span></div>`:''}
-      </div>`}
-    </div>`;
+    if (cancelled){
+      return `<tr class="cx"><td class="svc"><div class="sv-when">${fmtDate(c.travelDate)}</div>
+        <div class="sv-name">${esc(c.activity||c.service||'Service')}</div></td>
+        <td class="allpt"><span class="pt cx">Cancelled</span></td>
+        <td colspan="5" class="cxnote">This service was cancelled and is not part of the trip.</td></tr>`;
+    }
+    return `<tr>
+      <td class="svc">
+        <div class="sv-when">${fmtDate(c.travelDate)}${c.pickupTime?` \u00B7 <b>${esc(c.pickupTime)}</b>`:''}</div>
+        <div class="sv-name">${esc(c.activity||c.service||'Service')}</div>
+        <div class="sv-meta">${esc(c.service||'')}${c.bookingRef?` \u00B7 Ref <b>${esc(c.bookingRef)}</b>`:''}${sp.notes?` \u00B7 ${esc(sp.notes)}`:''}</div>
+      </td>
+      <td class="allpt"><span class="pt ${ok?'ok':'no'}">${ok?'\u2713 6/6':'Pending'}</span></td>
+      ${COLS.map(([k])=>cell(sp,k)).join('')}
+    </tr>`;
   };
 
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html><html lang="en-GB"><head><meta charset="UTF-8">
   <title>ORN Travel Voucher ${esc(b.fileNo)}</title>
   <style>
+    @page{ size:A4 landscape; margin:12mm }
     body{font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;color:#1d2433;margin:0;font-size:12px;line-height:1.5;background:#fff}
-    .wrap{max-width:800px;margin:0 auto;padding:32px}
-    .vhead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #dc051e;padding-bottom:16px;margin-bottom:4px}
+    .wrap{max-width:1180px;margin:0 auto;padding:26px 30px}
+    .vhead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #dc051e;padding-bottom:14px;margin-bottom:4px}
     .brand .mark{display:inline-block;background:#dc051e;color:#fff;font-weight:800;font-size:22px;letter-spacing:-1px;padding:6px 12px 8px;border-radius:9px;font-family:'Segoe UI',Arial,sans-serif}
     .brand .sub{display:inline-block;font-size:13px;letter-spacing:3px;color:#0a0a0b;margin-left:8px;vertical-align:middle;font-weight:300}
     .vtag{text-align:right}
     .vtag .t{font-size:20px;font-weight:800;color:#0a0a0b;letter-spacing:.5px}
     .vtag .s{font-size:10.5px;color:#5f6880;letter-spacing:1px;text-transform:uppercase}
-    .vsummary{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 6px}
-    .box{border:1px solid #e6e9ef;border-radius:9px;padding:9px 13px;min-width:120px}
+    .vsummary{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0 10px}
+    .box{border:1px solid #e6e9ef;border-radius:9px;padding:8px 13px;min-width:120px}
     .box .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;color:#5f6880}
     .box .v{font-weight:700;font-size:13px}
-    h2{font-size:13px;color:#dc051e;text-transform:uppercase;letter-spacing:1px;margin:22px 0 10px;border-bottom:1px solid #e6e9ef;padding-bottom:5px}
-    .voucher-item{border:1px solid #e6e9ef;border-left:4px solid #2c9e51;border-radius:9px;padding:13px 15px;margin-bottom:12px;break-inside:avoid;page-break-inside:avoid}
-    .voucher-item.cx{border-left-color:#c9ced8;opacity:.7}
-    .vi-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
-    .vi-when{font-size:11px;color:#5f6880}
-    .vi-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:11px}
-    .vi-badge.ok{background:#e5f5ea;color:#1c7a3e}
-    .vi-badge.no{background:#fbf1dc;color:#c4890c}
-    .vi-badge.cx{background:#eef0f4;color:#9aa2b5}
-    .vi-title{font-size:15px;font-weight:700;color:#16181b;margin:2px 0}
-    .vi-meta{font-size:11px;color:#5f6880;margin-bottom:8px}
-    .six-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 20px;margin-top:8px;padding-top:9px;border-top:1px dashed #e0e3ea}
-    .six-item{display:flex;align-items:baseline;gap:7px;font-size:11px}
-    .six-item .tick{font-weight:800;width:13px;flex:0 0 13px;text-align:center}
-    .six-item.done .tick{color:#2c9e51}
-    .six-item.todo .tick{color:#c9a227}
-    .six-l{color:#5f6880;flex:0 0 128px}
-    .six-v{color:#16181b;font-weight:600}
-    .six-item.todo .six-v{color:#c4890c;font-weight:400;font-style:italic}
-    .assure{background:#f7f8f9;border-left:3px solid #dc051e;border-radius:0 8px 8px 0;padding:11px 15px;margin:6px 0 4px;font-size:11px;color:#4a4e53}
-    .foot{color:#9aa2b5;font-size:10px;margin-top:26px;border-top:1px solid #eceff4;padding-top:10px}
+    h2{font-size:13px;color:#dc051e;text-transform:uppercase;letter-spacing:1px;margin:14px 0 10px;border-bottom:1px solid #e6e9ef;padding-bottom:5px}
+    table.vt{width:100%;border-collapse:collapse;table-layout:fixed}
+    table.vt thead th{background:#0a0a0b;color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;padding:8px 6px;text-align:center;vertical-align:middle}
+    table.vt thead th.svc-h{text-align:left;width:42%}
+    table.vt thead th.allpt-h{width:9%}
+    table.vt tbody td{border-bottom:1px solid #e9ecf1;padding:9px 6px;vertical-align:middle;text-align:center}
+    table.vt tbody tr:nth-child(even) td{background:#fafbfc}
+    td.svc{text-align:left}
+    .sv-when{font-size:10px;color:#5f6880}
+    .sv-name{font-size:13px;font-weight:700;color:#16181b;margin:1px 0}
+    .sv-meta{font-size:10px;color:#5f6880}
+    td.tk .mk{font-size:15px;font-weight:800;display:block;line-height:1}
+    td.tk.done .mk{color:#2c9e51}
+    td.tk.todo .mk{color:#c9a227}
+    td.tk .cv{display:block;font-size:9px;color:#5f6880;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+    .pt{font-size:10px;font-weight:800;padding:3px 8px;border-radius:11px;white-space:nowrap}
+    .pt.ok{background:#e5f5ea;color:#1c7a3e}
+    .pt.no{background:#fbf1dc;color:#c4890c}
+    .pt.cx{background:#eef0f4;color:#9aa2b5}
+    tr.cx td{opacity:.6}
+    td.cxnote{text-align:left;font-size:10px;color:#9aa2b5;font-style:italic}
+    .legend{font-size:10px;color:#5f6880;margin:8px 0 2px}
+    .legend .mk{color:#2c9e51;font-weight:800}
+    .assure{background:#f7f8f9;border-left:3px solid #dc051e;border-radius:0 8px 8px 0;padding:11px 15px;margin:12px 0 4px;font-size:11px;color:#4a4e53}
+    .foot{color:#9aa2b5;font-size:10px;margin-top:20px;border-top:1px solid #eceff4;padding-top:10px}
     .noprint{background:#fdf3f4;border:1px solid #dc051e;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:11.5px}
     .noprint button{background:#dc051e;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;margin-left:6px}
-    @media print{ .noprint{display:none} .wrap{max-width:none;padding:12mm} body{font-size:11px} }
+    @media print{ .noprint{display:none} .wrap{max-width:none;padding:0} }
   </style></head><body><div class="wrap">
-  <div class="noprint">This is the client <b>Confirmation / Travel Voucher</b>. Press <b>Ctrl/Cmd + P</b> \u2192 <b>Save as PDF</b> to send to the guest.<button onclick="window.print()">Print / Save PDF</button></div>
+  <div class="noprint">This is the client <b>Confirmation / Travel Voucher</b> (landscape). Press <b>Ctrl/Cmd + P</b> \u2192 <b>Save as PDF</b> to send to the guest.<button onclick="window.print()">Print / Save PDF</button></div>
 
   <div class="vhead">
     <div class="brand"><span class="mark">orn</span><span class="sub">EUROPE</span></div>
@@ -2754,10 +2761,20 @@ function bookingSummary(id){
     <div class="box"><div class="l">Issued</div><div class="v">${new Date().toLocaleDateString('en-GB')}</div></div>
   </div>
 
-  ${allSix ? '' : '<div class="assure" style="border-left-color:#c4890c;background:#fdf9f0">Note \u2014 not every service has completed its 6-point reconfirmation yet. This voucher is provisional until all items show a green tick.</div>'}
+  ${allSix ? '' : '<div class="assure" style="border-left-color:#c4890c;background:#fdf9f0">Note \u2014 not every service has completed its 6-point reconfirmation yet. This voucher is provisional until each row shows all six ticks.</div>'}
 
-  <h2>Your confirmed services</h2>
-  ${b.components.map(compCard).join('')}
+  <h2>Your confirmed services &amp; 6-point reconfirmation</h2>
+  <table class="vt">
+    <thead><tr>
+      <th class="svc-h">Service</th>
+      <th class="allpt-h">6-point</th>
+      <th>Operator</th><th>Phone</th><th>Confirmation</th><th>Time</th><th>Location</th>
+    </tr></thead>
+    <tbody>
+      ${b.components.map(row).join('')}
+    </tbody>
+  </table>
+  <div class="legend"><span class="mk">\u2713</span> reconfirmed with the operator &nbsp;\u00B7&nbsp; \u25CB outstanding</div>
 
   <div class="assure">Every service above has been reconfirmed directly with the operator against our 6-point check \u2014 operator, contact number, confirmation reference, time and meeting point \u2014 so you can travel with confidence. Please keep this voucher with you and present it where asked.</div>
 
