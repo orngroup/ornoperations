@@ -563,6 +563,7 @@ function subscribeFirebase(){
     if (s.empty){ DEFAULT_USERS.forEach(u=>DB.collection(COLL.users).doc(u.id).set(u)); return; }
     state.users = s.docs.map(d=>d.data());
     mergeDefaultUsers();
+    populateLoginUsers(); // keep the sign-in dropdown in sync with the live user list
     populateLoginUsers();
     if (!state.user) tryRestoreSession();
     renderSettings();
@@ -767,7 +768,7 @@ function renderListView(kind){
   renderSidebar();
 }
 
-function saveUsers(){ if (FIRE){ state.users.forEach(u=>DB.collection(COLL.users).doc(u.id).set(u)); } else lsSet('users', state.users); }
+function saveUsers(){ if (FIRE){ state.users.forEach(u=>DB.collection(COLL.users).doc(u.id).set(u)); } else lsSet('users', state.users); try{ populateLoginUsers(); }catch(e){} }
 function saveFx(){ if (FIRE) DB.collection(COLL.settings).doc('fx').set(state.fx); else { lsSet('fx', state.fx); renderAll(); } }
 function saveNotify(){ if (FIRE) DB.collection(COLL.settings).doc('notify').set(state.notify); else lsSet('notify', state.notify); }
 function toast(msg){
@@ -912,8 +913,12 @@ function toggleTheme(){
 function populateLoginUsers(){
   const sel = document.getElementById('loginUser');
   if (!sel || sel.tagName!=='SELECT') return;
-  const users = (state.users && state.users.length? state.users : DEFAULT_USERS).slice()
-    .sort((a,z)=>a.name.localeCompare(z.name));
+  // merge live users with the built-in list so newly-added users always appear,
+  // even before Firebase has synced them; de-dupe by id (live record wins)
+  const byId = new Map();
+  DEFAULT_USERS.forEach(u=>byId.set(u.id, u));
+  (state.users||[]).forEach(u=>byId.set(u.id, u));
+  const users = Array.from(byId.values()).sort((a,z)=>a.name.localeCompare(z.name));
   const cur = sel.value;
   sel.innerHTML = users.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
   if (cur && users.some(u=>u.id===cur)) sel.value = cur;
