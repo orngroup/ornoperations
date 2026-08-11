@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ORN Ops">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-64.png">
+<title>ORN Europe — Ops (Mobile)</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --red:#dc051e; --black:#0a0a0b; --ink:#1a1d21; --muted:#6b7076; --line:#e2e4e6;
+  --panel:#f7f8f9; --ok:#1c7a3e; --okbg:#e7f6ec; --warn:#b5730a; --warnbg:#fdf3e0;
+  --blue:#1f5fb0; --bluebg:#e5eefb; --recon:#1f5fb0;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#fff;color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:15px;line-height:1.45}
+body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:16px}
+.hidden{display:none!important}
+
+/* top bar */
+.topbar{position:sticky;top:0;z-index:20;background:var(--black);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+  padding-top:calc(12px + env(safe-area-inset-top))}
+.topbar .brand{display:flex;align-items:center;gap:8px;font-weight:800}
+.topbar .mark{background:var(--red);border-radius:7px;padding:3px 8px 4px;font-weight:800;font-size:16px;letter-spacing:-.5px}
+.topbar .sub{font-weight:300;letter-spacing:2px;font-size:11px;opacity:.85}
+.topbar .oob{font-size:9px;letter-spacing:1px;color:#ff8a95;border:1px solid #4a2226;border-radius:10px;padding:2px 7px;margin-left:6px}
+.topbar .who{font-size:12px;opacity:.8}
+.topbar .out{background:none;border:1px solid #333;color:#fff;border-radius:7px;padding:5px 10px;font-size:12px}
+
+/* login */
+.login{max-width:440px;margin:0 auto;padding:30px 20px}
+.login .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px 20px;margin-top:20px}
+.login h1{font-size:19px;margin:0 0 4px}
+.login .p{color:var(--muted);font-size:13px;margin:0 0 20px}
+label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:14px 0 5px;font-weight:700}
+select,input[type=password],input[type=text],input[type=date]{width:100%;padding:13px 14px;border:1px solid var(--line);
+  border-radius:11px;background:#fff;color:var(--ink);appearance:none}
+.btn{background:var(--red);color:#fff;border:none;border-radius:11px;padding:14px;width:100%;font-weight:700;font-size:16px;margin-top:18px}
+.btn.sm{width:auto;padding:9px 14px;font-size:14px;margin-top:0}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.dark{background:var(--black)}
+.err{color:var(--red);font-size:13px;margin-top:10px;min-height:16px}
+.status-pill{font-size:10px;letter-spacing:.5px;padding:3px 8px;border-radius:10px;font-weight:700}
+.status-pill.live{background:var(--okbg);color:var(--ok)}
+.status-pill.local{background:#eef0f4;color:#5f6880}
+
+/* search */
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+.search-hint{color:var(--muted);font-size:12.5px;margin:2px 0 12px}
+.searchbar{display:flex;gap:8px;margin-bottom:6px}
+.searchbar input{flex:1}
+.filters{display:flex;gap:8px;margin-bottom:12px}
+.filters select,.filters input{flex:1;padding:11px 12px;font-size:14px}
+.res-count{font-size:12px;color:var(--muted);margin:4px 2px 10px}
+
+/* result card */
+.rcard{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px;background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.rcard:active{background:var(--panel)}
+.rcard .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rcard .fno{font-weight:800;font-size:15px}
+.rcard .src{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:9px;letter-spacing:.3px}
+.src.USA{background:var(--bluebg);color:var(--blue)} .src.Australia{background:#eafaef;color:var(--ok)}
+.src.Nexus{background:#fdeef0;color:var(--red)}
+.rcard .pax{font-size:14px;margin:5px 0 2px;font-weight:600}
+.rcard .meta{font-size:12px;color:var(--muted)}
+.rcard .prog{margin-top:8px;height:6px;background:#eef0f2;border-radius:4px;overflow:hidden}
+.rcard .prog i{display:block;height:100%;background:var(--ok)}
+
+/* booking detail */
+.detail{max-width:640px;margin:0 auto;padding:16px;padding-bottom:40px}
+.back{background:none;border:none;color:var(--red);font-weight:700;font-size:14px;padding:6px 0;margin-bottom:4px}
+.dhead{border-bottom:2px solid var(--red);padding-bottom:12px;margin-bottom:14px}
+.dhead .fno{font-size:22px;font-weight:800}
+.dhead .pax{font-size:15px;font-weight:600;margin-top:3px}
+.dhead .meta{font-size:13px;color:var(--muted);margin-top:4px}
+.dsummary{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chipbox{border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:12px}
+.chipbox b{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+
+h3.sh{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin:20px 0 8px;font-weight:800}
+
+/* component */
+.comp{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:9px}
+.comp.Confirmed{border-left-color:var(--ok)} .comp.Reconfirmed{border-left-color:var(--recon)}
+.comp.Pending{border-left-color:var(--warn)} .comp.Cancelled{border-left-color:#c9ced8;opacity:.65}
+.comp .c1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.comp .cdate{font-size:11px;color:var(--muted)}
+.comp .cact{font-weight:600;font-size:14px;margin:2px 0}
+.comp .cmeta{font-size:12px;color:var(--muted)}
+.stat{font-size:10px;font-weight:800;padding:3px 9px;border-radius:10px;white-space:nowrap}
+.stat.Confirmed{background:var(--okbg);color:var(--ok)} .stat.Reconfirmed{background:var(--bluebg);color:var(--recon)}
+.stat.Pending{background:var(--warnbg);color:var(--warn)} .stat.Cancelled{background:#eef0f4;color:#9aa2b5}
+.statsel{margin-top:8px}
+.statsel select{padding:9px 10px;font-size:13px;border-radius:8px}
+
+/* comments */
+.comment{background:var(--panel);border-radius:10px;padding:9px 11px;margin-bottom:7px}
+.comment .who{font-weight:800;font-size:12px;color:var(--red)}
+.comment .when{font-size:10.5px;color:var(--muted);margin-left:7px}
+.comment .tx{font-size:13.5px;margin-top:3px;white-space:pre-wrap}
+.comment.task{border-left:3px solid var(--red)}
+.comment .tasktag{font-size:9px;font-weight:800;background:var(--red);color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px}
+.comment audio{width:100%;margin-top:6px}
+.comment img{max-width:100%;border-radius:8px;margin-top:6px}
+
+/* add note panel */
+.addpanel{border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:8px;background:#fff}
+.seg{display:flex;gap:6px;margin-bottom:10px}
+.seg button{flex:1;padding:9px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--black);color:#fff;border-color:var(--black)}
+textarea{width:100%;min-height:70px;padding:12px;border:1px solid var(--line);border-radius:11px;resize:vertical}
+.mediarow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.mediabtn{flex:1;min-width:120px;border:1px solid var(--line);background:var(--panel);border-radius:11px;padding:12px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--ink)}
+.mediabtn.rec{background:#fdeef0;border-color:var(--red);color:var(--red)}
+.preview{margin-top:10px}
+.preview audio{width:100%} .preview img{max-width:100%;border-radius:10px;margin-top:6px}
+.preview .clear{font-size:12px;color:var(--red);background:none;border:none;margin-top:4px;padding:0}
+.savedmsg{color:var(--ok);font-size:13px;font-weight:700;margin-top:10px;min-height:16px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom));
+  background:var(--black);color:#fff;padding:12px 18px;border-radius:24px;font-size:14px;font-weight:600;
+  z-index:50;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90%}
+.toast.show{opacity:1}
+.install{background:var(--warnbg);border:1px solid #f0d9a8;border-radius:12px;padding:12px 14px;margin:12px 0;font-size:13px;display:flex;align-items:center;gap:10px}
+.install button{margin-left:auto}
+.empty{text-align:center;color:var(--muted);padding:34px 20px;font-size:14px}
+.tcount{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px}
+.tcount:empty{display:none}
+.taskcard{border:1px solid var(--line);border-left:4px solid var(--red);border-radius:12px;padding:13px;margin-bottom:10px;background:#fff}
+.taskcard .tt{font-size:14px;font-weight:600;margin-bottom:4px;white-space:pre-wrap}
+.taskcard .tm{font-size:12px;color:var(--muted)}
+.taskcard .trow{display:flex;gap:8px;margin-top:10px}
+.taskcard .trow button{flex:1;padding:9px;border-radius:9px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.taskcard .trow .done{background:var(--okbg);color:var(--ok);border-color:#bfe6cd}
+.taskcard.doneState{opacity:.55}
+.taskcard.doneState .tt{text-decoration:line-through}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="loginView">
+  <div class="topbar">
+    <div class="brand"><span class="mark">orn</span><span class="sub">EUROPE</span><span class="oob">OPS · MOBILE</span></div>
+    <span id="netPill" class="status-pill local">connecting…</span>
+  </div>
+  <div class="login">
+    <div class="card">
+      <h1>Operations — Mobile</h1>
+      <p class="p">Out-of-hours &amp; emergency access. Search a booking, view components, add notes or tasks back to the main portal.</p>
+      <label>User</label>
+      <select id="loginUser"></select>
+      <label>Password</label>
+      <input id="loginPass" type="password" placeholder="ornops + your initials" autocomplete="current-password">
+      <button class="btn" onclick="doLogin()">Sign in</button>
+      <div class="err" id="loginErr"></div>
+    </div>
+    <div id="installHint" class="install hidden">
+      <span id="installTxt"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="appView" class="hidden">
+  <div class="topbar">
+    <div class="brand"><span class="mark">orn</span><span class="sub">EUROPE</span><span class="oob">OPS · MOBILE</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="netPill2" class="status-pill local">local</span>
+      <span class="who" id="whoName"></span>
+      <button class="out" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div id="searchView" class="wrap">
+    <div class="seg" style="margin-bottom:12px">
+      <button id="tabSearch" class="on" onclick="setTab('search')">Search bookings</button>
+      <button id="tabTasks" onclick="setTab('tasks')">My tasks <span id="taskCount" class="tcount"></span></button>
+    </div>
+
+    <div id="searchPane">
+      <div class="search-hint">Search by guest name, booking reference, TAG or Nexus ref.</div>
+      <div class="searchbar">
+        <input id="q" type="text" placeholder="Name, booking ref, TAG / Nexus ref…" oninput="runSearch()" autocomplete="off">
+        <button class="btn sm" onclick="runSearch()">Search</button>
+      </div>
+      <div class="filters">
+        <input id="qdate" type="date" onchange="runSearch()" aria-label="Departure date">
+        <button class="btn sm ghost" onclick="clearSearch()">Clear</button>
+      </div>
+      <div class="res-count" id="resCount"></div>
+      <div id="results"></div>
+    </div>
+
+    <div id="tasksPane" class="hidden">
+      <div class="search-hint">Open tasks you've flagged for yourself. Tap one to open the booking; mark done when actioned.</div>
+      <div id="tasksList"></div>
+    </div>
+  </div>
+
+  <!-- DETAIL -->
+  <div id="detailView" class="detail hidden"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="users.js"></script>
+<script>
+/* ---------- Firebase (same database as the main portal) ---------- */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyALzMtGRDrQyJOC-KbtqvCPgo1NBQ6Vdpc",
+  authDomain: "orn-operations.firebaseapp.com",
+  projectId: "orn-operations",
+  storageBucket: "orn-operations.firebasestorage.app",
+  messagingSenderId: "470679786970",
+  appId: "1:470679786970:web:28945392beb13b9a2d5ce3"
+};
+const COLL = { bookings:'recon_bookings', activity:'recon_activity', users:'recon_users' };
+let DB=null, FIRE=false;
+const state = { user:null, users: MOBILE_USERS.slice(), bookings:[], current:null };
+
+function setNet(txt, live){
+  ['netPill','netPill2'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.textContent=txt; e.className='status-pill '+(live?'live':'local'); } });
+}
+
+function initFirebase(){
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    DB = firebase.firestore();
+    FIRE = true;
+    setNet('Live · Firebase', true);
+    // live users (merge with built-in)
+    DB.collection(COLL.users).onSnapshot(s=>{
+      if(!s.empty){
+        const live = s.docs.map(d=>d.data());
+        const byId = new Map();
+        MOBILE_USERS.forEach(u=>byId.set(u.id,u));
+        live.forEach(u=>{ if(u&&u.id) byId.set(u.id, Object.assign(byId.get(u.id)||{}, u)); });
+        state.users = Array.from(byId.values());
+        populateUsers();
+      }
+    }, err=>console.warn('users snapshot', err));
+    // live bookings
+    DB.collection(COLL.bookings).onSnapshot(s=>{
+      state.bookings = s.docs.map(d=>({__id:d.id, ...d.data()}));
+      if(state.current){ const b=state.bookings.find(x=>bid(x)===state.current); if(b) renderDetail(b); }
+      if(!document.getElementById('searchView').classList.contains('hidden')){ if(activeTab==='tasks') renderTasks(); else runSearch(); }
+      updateTaskCount();
+    }, err=>{ console.warn('bookings snapshot', err); setNet('Connection issue', false); });
+  }catch(e){
+    console.warn('firebase init failed', e);
+    FIRE=false; setNet('Offline', false);
+  }
+}
+
+function bid(b){ return b.id || b.fileNo || b.__id; }
+
+/* ---------- login ---------- */
+function populateUsers(){
+  const sel = document.getElementById('loginUser');
+  const cur = sel.value;
+  const us = state.users.slice().sort((a,z)=>(a.name||'').localeCompare(z.name||''));
+  sel.innerHTML = us.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  if(cur && us.some(u=>u.id===cur)) sel.value=cur;
+}
+function doLogin(){
+  const id = document.getElementById('loginUser').value.trim().toUpperCase();
+  const p = document.getElementById('loginPass').value;
+  const found = state.users.find(u=>u.id.toUpperCase()===id && u.pass===p);
+  if(!found){ document.getElementById('loginErr').textContent='Invalid user ID or password.'; return; }
+  state.user = found;
+  sessionStorage.setItem('orn_mobile_user', JSON.stringify({id:found.id}));
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
+  document.getElementById('whoName').textContent = found.name.split(' ')[0];
+  runSearch(); updateTaskCount();
+}
+function doLogout(){
+  state.user=null; state.current=null;
+  sessionStorage.removeItem('orn_mobile_user');
+  document.getElementById('appView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+  document.getElementById('loginPass').value='';
+}
+function tryRestore(){
+  const s = sessionStorage.getItem('orn_mobile_user');
+  if(s){ try{ const {id}=JSON.parse(s); const u=state.users.find(x=>x.id===id); if(u){ state.user=u;
+    document.getElementById('loginView').classList.add('hidden');
+    document.getElementById('appView').classList.remove('hidden');
+    document.getElementById('whoName').textContent=u.name.split(' ')[0]; runSearch(); } }catch(e){} }
+}
+
+/* ---------- search ---------- */
+function srcLabel(b){ const f=(b.fileNo||'').toUpperCase(); if(f.startsWith('TAG'))return 'USA'; if(f.startsWith('ORN')||f.startsWith('OAU'))return 'Nexus'; return b.source||'—'; }
+function fmtDate(iso){ if(!iso)return '—'; try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return iso; } }
+function activeComps(b){ return (b.components||[]).filter(c=>c.status!=='Cancelled'); }
+function progress(b){ const a=activeComps(b); if(!a.length)return 0; const done=a.filter(c=>c.status==='Confirmed'||c.status==='Reconfirmed').length; return Math.round(done/a.length*100); }
+
+function runSearch(){
+  const q = (document.getElementById('q').value||'').trim().toLowerCase();
+  const qd = document.getElementById('qdate').value;
+  let rows = state.bookings.slice();
+  if(qd) rows = rows.filter(b=>(b.tripStart||'')===qd);
+  if(q){
+    rows = rows.filter(b=>{
+      const hay = [b.fileNo,b.pax,b.contact,b.destinations].map(x=>(x||'').toLowerCase()).join(' ');
+      return hay.includes(q);
+    });
+  }
+  rows.sort((a,z)=>(a.tripStart||'').localeCompare(z.tripStart||''));
+  const el = document.getElementById('results');
+  const rc = document.getElementById('resCount');
+  if(!q && !qd){ rc.textContent=''; el.innerHTML='<div class="empty">Type a name or reference to find a booking.</div>'; return; }
+  rc.textContent = rows.length+' booking'+(rows.length===1?'':'s')+' found';
+  if(!rows.length){ el.innerHTML='<div class="empty">No bookings match. Try a different name or reference.</div>'; return; }
+  el.innerHTML = rows.slice(0,60).map(b=>{
+    const src=srcLabel(b), pr=progress(b);
+    return `<div class="rcard" onclick="openBooking('${esc(bid(b))}')">
+      <div class="r1"><span class="fno">${esc(b.fileNo||'—')}</span><span class="src ${src}">${src}</span></div>
+      <div class="pax">${esc(b.pax||b.contact||'—')}</div>
+      <div class="meta">${fmtDate(b.tripStart)} → ${fmtDate(b.tripEnd)} · ${esc(b.destinations||'')}</div>
+      <div class="prog"><i style="width:${pr}%"></i></div>
+    </div>`;
+  }).join('');
+}
+function clearSearch(){ document.getElementById('q').value=''; document.getElementById('qdate').value=''; runSearch(); }
+
+/* ---------- tabs: search / my tasks ---------- */
+let activeTab='search';
+function setTab(tab){
+  activeTab=tab;
+  document.getElementById('tabSearch').classList.toggle('on', tab==='search');
+  document.getElementById('tabTasks').classList.toggle('on', tab==='tasks');
+  document.getElementById('searchPane').classList.toggle('hidden', tab!=='search');
+  document.getElementById('tasksPane').classList.toggle('hidden', tab!=='tasks');
+  if(tab==='tasks') renderTasks();
+}
+// collect open tasks flagged for the current user across all bookings
+function myOpenTasks(){
+  if(!state.user) return [];
+  const out=[];
+  state.bookings.forEach(b=>{
+    (b.comments||[]).forEach((cm,idx)=>{
+      if(cm.task && !cm.taskDone && (cm.taskFor===state.user.id || cm.who===state.user.id)){
+        out.push({b, cm, idx});
+      }
+    });
+  });
+  out.sort((a,z)=>(z.cm.ts||'').localeCompare(a.cm.ts||''));
+  return out;
+}
+function updateTaskCount(){
+  const n=myOpenTasks().length;
+  const el=document.getElementById('taskCount');
+  if(el) el.textContent = n? n : '';
+}
+function renderTasks(){
+  const list=document.getElementById('tasksList');
+  const tasks=myOpenTasks();
+  if(!tasks.length){ list.innerHTML='<div class="empty">No open tasks. Anything you flag for yourself on a booking appears here.</div>'; return; }
+  list.innerHTML=tasks.map((t,i)=>`
+    <div class="taskcard" data-i="${i}">
+      <div class="tt">${esc(t.cm.text||'(task)')}</div>
+      <div class="tm">${esc(t.b.fileNo||'')} · ${esc(t.b.pax||'')} · flagged ${t.cm.ts?new Date(t.cm.ts).toLocaleDateString('en-GB'):''}</div>
+      <div class="trow">
+        <button onclick="openBooking('${esc(bid(t.b))}')">Open booking</button>
+        <button class="done" onclick="markTaskDone('${esc(bid(t.b))}',${t.idx})">Mark done</button>
+      </div>
+    </div>`).join('');
+}
+function markTaskDone(bookingId, idx){
+  const b=state.bookings.find(x=>bid(x)===bookingId); if(!b||!b.comments||!b.comments[idx])return;
+  b.comments[idx].taskDone=true; b.comments[idx].taskDoneBy=state.user.id; b.comments[idx].taskDoneAt=new Date().toISOString();
+  b.comments.push({who:state.user.id, ts:new Date().toISOString(), text:`[mobile] task completed: ${b.comments[idx].text||''}`.slice(0,180)});
+  persist(b,'Task marked done');
+  renderTasks(); updateTaskCount(); toast('Task marked done');
+}
+
+/* ---------- booking detail ---------- */
+function openBooking(id){ const b=state.bookings.find(x=>bid(x)===id); if(!b)return; state.current=id;
+  document.getElementById('searchView').classList.add('hidden');
+  const d=document.getElementById('detailView'); d.classList.remove('hidden'); renderDetail(b); window.scrollTo(0,0); }
+function backToSearch(){ state.current=null; document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('searchView').classList.remove('hidden'); }
+
+const STATUSES=['Pending','Confirmed','Reconfirmed','Cancelled'];
+function renderDetail(b){
+  const d=document.getElementById('detailView');
+  const comps=(b.components||[]);
+  const canEdit = true; // all signed-in users may update status & add notes
+  const compHtml = comps.map((c,i)=>`
+    <div class="comp ${c.status||'Pending'}">
+      <div class="c1"><span class="cdate">${fmtDate(c.travelDate)}${c.pickupTime?' · '+esc(c.pickupTime):''}</span>
+        <span class="stat ${c.status||'Pending'}">${esc(c.status||'Pending')}</span></div>
+      <div class="cact">${esc(c.activity||c.service||'Service')}</div>
+      <div class="cmeta">${esc(c.service||'')}${c.supplier?' · '+esc(c.supplier):''}${c.bookingRef?' · Ref '+esc(c.bookingRef):''}</div>
+      ${canEdit?`<div class="statsel"><select onchange="changeStatus(${i}, this.value)">
+        ${STATUSES.map(s=>`<option ${((c.status||'Pending')===s)?'selected':''}>${s}</option>`).join('')}
+      </select></div>`:''}
+    </div>`).join('');
+
+  const notes=(b.comments||[]).slice().reverse().map(cm=>`
+    <div class="comment ${cm.task?'task':''}">
+      <span class="who">${esc(cm.who||'?')}</span><span class="when">${cm.ts?new Date(cm.ts).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'}):''}</span>
+      ${cm.task?'<span class="tasktag">TASK</span>':''}
+      ${cm.text?`<div class="tx">${esc(cm.text)}</div>`:''}
+      ${cm.audio?`<audio controls src="${cm.audio}"></audio>`:''}
+      ${cm.image?`<img src="${cm.image}">`:''}
+    </div>`).join('') || '<div style="color:var(--muted);font-size:13px">No notes yet.</div>';
+
+  d.innerHTML=`
+    <button class="back" onclick="backToSearch()">‹ Back to search</button>
+    <div class="dhead">
+      <div class="fno">${esc(b.fileNo||'—')} <span class="src ${srcLabel(b)}" style="font-size:11px;vertical-align:middle">${srcLabel(b)}</span></div>
+      <div class="pax">${esc(b.pax||b.contact||'—')}</div>
+      <div class="meta">${fmtDate(b.tripStart)} → ${fmtDate(b.tripEnd)} · ${esc(b.destinations||'')}</div>
+      <div class="dsummary">
+        <div class="chipbox"><b>Components</b>${comps.length}</div>
+        <div class="chipbox"><b>Reconfirmed</b>${progress(b)}%</div>
+        <div class="chipbox"><b>Contact</b>${esc(b.contact||'—')}</div>
+      </div>
+    </div>
+
+    <h3 class="sh">Components &amp; status</h3>
+    ${compHtml||'<div style="color:var(--muted)">No components.</div>'}
+
+    <h3 class="sh">Notes &amp; tasks</h3>
+    <div class="addpanel">
+      <div class="seg">
+        <button id="segNote" class="on" onclick="setKind('note')">Comment</button>
+        <button id="segTask" onclick="setKind('task')">Task for me</button>
+      </div>
+      <textarea id="noteText" placeholder="Type a note, or record / attach below…"></textarea>
+      <div class="mediarow">
+        <button class="mediabtn" id="recBtn" onclick="toggleRecord()">🎤 Record voice</button>
+        <label class="mediabtn">📷 Photo
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="pickImage(this)">
+        </label>
+      </div>
+      <div class="preview" id="preview"></div>
+      <button class="btn" onclick="saveNote()">Save to booking</button>
+      <div class="savedmsg" id="savedMsg"></div>
+    </div>
+
+    <div style="margin-top:14px">${notes}</div>
+  `;
+  // reset compose state
+  compose = { kind:'note', audio:null, image:null };
+}
+
+/* ---------- status change ---------- */
+function changeStatus(idx, val){
+  const b = state.bookings.find(x=>bid(x)===state.current); if(!b)return;
+  const old = b.components[idx].status;
+  b.components[idx].status = val;
+  b.components[idx].statusBy = state.user.id;
+  b.components[idx].statusAt = new Date().toISOString();
+  // log as a comment so the main portal shows who changed it from mobile
+  b.comments = b.comments||[];
+  b.comments.push({who:state.user.id, ts:new Date().toISOString(),
+    text:`[mobile] ${b.components[idx].activity||'component'}: status ${old||'Pending'} → ${val}`});
+  persist(b, 'Status updated');
+}
+
+/* ---------- compose note / task / media ---------- */
+let compose = { kind:'note', audio:null, image:null };
+let mediaRec=null, chunks=[], recording=false;
+function setKind(k){ compose.kind=k;
+  document.getElementById('segNote').classList.toggle('on', k==='note');
+  document.getElementById('segTask').classList.toggle('on', k==='task');
+}
+function renderPreview(){
+  const p=document.getElementById('preview'); let h='';
+  if(compose.audio) h+=`<audio controls src="${compose.audio}"></audio><button class="clear" onclick="clearAudio()">Remove recording</button>`;
+  if(compose.image) h+=`<img src="${compose.image}"><button class="clear" onclick="clearImage()">Remove photo</button>`;
+  p.innerHTML=h;
+}
+function clearAudio(){ compose.audio=null; renderPreview(); }
+function clearImage(){ compose.image=null; renderPreview(); }
+
+async function toggleRecord(){
+  const btn=document.getElementById('recBtn');
+  if(!recording){
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      mediaRec=new MediaRecorder(stream); chunks=[];
+      mediaRec.ondataavailable=e=>chunks.push(e.data);
+      mediaRec.onstop=()=>{ const blob=new Blob(chunks,{type:'audio/webm'});
+        const r=new FileReader(); r.onload=()=>{ compose.audio=r.result; renderPreview();
+          if(compose.audio.length>900000) toast('Recording is large — keep voice notes short.'); }; r.readAsDataURL(blob);
+        stream.getTracks().forEach(t=>t.stop()); };
+      mediaRec.start(); recording=true; btn.classList.add('rec'); btn.textContent='⏹ Stop recording';
+    }catch(e){ toast('Microphone not available on this device.'); }
+  } else {
+    mediaRec.stop(); recording=false; btn.classList.remove('rec'); btn.textContent='🎤 Record voice';
+  }
+}
+function pickImage(input){
+  const f=input.files&&input.files[0]; if(!f)return;
+  // downscale to keep base64 small
+  const img=new Image(); const rd=new FileReader();
+  rd.onload=()=>{ img.onload=()=>{
+    const max=1000; let {width:w,height:h}=img; if(w>max||h>max){ const s=Math.min(max/w,max/h); w=Math.round(w*s); h=Math.round(h*s); }
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h);
+    compose.image=cv.toDataURL('image/jpeg',0.7); renderPreview();
+    if(compose.image.length>900000) toast('Photo is large — it will still save.');
+  }; img.src=rd.result; };
+  rd.readAsDataURL(f);
+}
+
+function saveNote(){
+  const b=state.bookings.find(x=>bid(x)===state.current); if(!b)return;
+  const text=(document.getElementById('noteText').value||'').trim();
+  if(!text && !compose.audio && !compose.image){ toast('Add a note, recording or photo first.'); return; }
+  const entry={ who:state.user.id, ts:new Date().toISOString(), text: (compose.kind==='task'? (text||'(task)') : text) };
+  if(compose.kind==='task'){ entry.task=true; entry.taskFor=state.user.id; entry.taskDone=false; }
+  if(compose.audio) entry.audio=compose.audio;
+  if(compose.image) entry.image=compose.image;
+  b.comments=b.comments||[]; b.comments.push(entry);
+  persist(b, compose.kind==='task'?'Task added (mobile)':'Note added (mobile)');
+  document.getElementById('noteText').value=''; compose={kind:compose.kind,audio:null,image:null}; renderPreview();
+  updateTaskCount();
+  document.getElementById('savedMsg').textContent = compose.kind==='task'?'Task saved to booking ✓':'Saved to booking ✓';
+  setTimeout(()=>{ const m=document.getElementById('savedMsg'); if(m)m.textContent=''; }, 2500);
+  toast('Saved to the booking');
+}
+
+/* ---------- persistence: write back to the same Firebase doc ---------- */
+function persist(b, action){
+  const id = b.__id || b.id || b.fileNo;
+  if(FIRE && DB){
+    const {__id, ...data}=b;
+    DB.collection(COLL.bookings).doc(id).set(data, {merge:true})
+      .then(()=>{ try{ DB.collection(COLL.activity).add({file:b.fileNo||id, who:state.user.id, ts:new Date().toISOString(), action:'[mobile] '+action}); }catch(e){} })
+      .catch(e=>{ console.warn('save failed', e); toast('Save failed — check connection'); });
+  } else {
+    toast('Offline — changes not saved');
+  }
+}
+
+/* ---------- utils ---------- */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastT=null;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'), 2600); }
+
+/* ---------- install hint (add to home screen) ---------- */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredPrompt=e;
+  const box=document.getElementById('installHint'); const txt=document.getElementById('installTxt');
+  txt.textContent='Install this app for quick access.';
+  const btn=document.createElement('button'); btn.className='btn sm'; btn.textContent='Install';
+  btn.onclick=async()=>{ box.classList.add('hidden'); deferredPrompt.prompt(); deferredPrompt=null; };
+  box.appendChild(btn); box.classList.remove('hidden');
+});
+function showIOSHintIfNeeded(){
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone=window.navigator.standalone|| window.matchMedia('(display-mode: standalone)').matches;
+  if(isIOS && !standalone){ const box=document.getElementById('installHint'); const txt=document.getElementById('installTxt');
+    txt.innerHTML='To install: tap <b>Share</b> ↑ then <b>Add to Home Screen</b>.'; box.classList.remove('hidden'); }
+}
+
+/* ---------- test/debug hook (safe: only exposes references, no behaviour change) ---------- */
+window.__orn = { get state(){return state;}, get compose(){return compose;}, set compose(v){compose=v;},
+  runSearch, openBooking, changeStatus, saveNote, setKind, srcLabel, doLogin, doLogout, populateUsers,
+  setTab, renderTasks, markTaskDone, myOpenTasks, updateTaskCount, backToSearch, clearSearch,
+  setFire(v){FIRE=v;}, setDB(v){DB=v;} };
+
+/* ---------- boot ---------- */
+populateUsers();
+initFirebase();
+setTimeout(()=>{ tryRestore(); showIOSHintIfNeeded(); }, 800);
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+</script>
+</body>
+</html>
