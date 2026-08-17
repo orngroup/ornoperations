@@ -245,6 +245,10 @@ table.bk td input:focus, table.bk td select:focus{border-color:var(--gold);backg
 
 .comp{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;background:var(--panel2);overflow:hidden}
 .comp-head{display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer;flex-wrap:wrap}
+.reorder{display:inline-flex;flex-direction:column;gap:1px;margin-right:-4px}
+.ord-btn{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:4px;width:20px;height:15px;line-height:1;font-size:8px;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.ord-btn:hover:not(:disabled){background:var(--gold-bg);color:var(--gold);border-color:var(--gold)}
+.ord-btn:disabled{opacity:.25;cursor:not-allowed}
 .comp-head:hover{background:var(--gold-bg)}
 .comp-head .date{font-weight:700;font-size:12.5px;color:var(--gold);white-space:nowrap}
 .comp-head .act{flex:1;font-size:13px;font-weight:600;min-width:180px}
@@ -1276,12 +1280,9 @@ function jumpToPending(){
 }
 
 /* ================= BOOKINGS LIST ================= */
-function renderBookings(){
+function computeBookingRows(){
   const HIST_HIDDEN = !finUnlocked();
-  const el = document.getElementById('view-bookings');
   const f = state.filters;
-  const months = [...new Set(state.bookings.map(b=>(b.tripStart||'').slice(0,7)).filter(Boolean))].sort();
-
   let rows = state.bookings.filter(b=>!HIST_HIDDEN || era(b)==='uk');
   rows.forEach(b=>b.__band = tband(b));
   if (f.era) rows = rows.filter(b=>era(b)===f.era);
@@ -1303,14 +1304,56 @@ function renderBookings(){
       b.components.some(c=>(c.activity||'').toLowerCase().includes(q) || (c.supplier||'').toLowerCase().includes(q) || (c.bookingRef||'').toLowerCase().includes(q)));
   }
   rows.sort((a,z)=> a.__band.order - z.__band.order || (a.tripStart||'').localeCompare(z.tripStart||''));
+  return rows;
+}
+
+function bookingRowsHTML(rows){
+  return `<div class="tbl-scroll"><table class="bk">
+      <thead><tr><th>Band</th><th>File No</th><th>Source</th><th>Trip start</th><th>Pax</th><th>Reconfirmation progress</th><th>Pending</th>${finUnlocked()? '<th>Net variance</th>' : ''}</tr></thead>
+      <tbody>
+      ${rows.map(b=>{
+        const act = activeComps(b), done = act.filter(c=>c.status==='Confirmed'||c.status==='Reconfirmed').length;
+        const pend = outstandingComps(b).length;
+        let net=0, has=false;
+        act.forEach(c=>{const v=compVariance(c); if(v){net+=v.eur;has=true;}});
+        const pct = act.length? Math.round(done/act.length*100):0;
+        return `<tr onclick="openBooking('${esc(b.id)}')">
+          <td><span class="badge ${b.__band.key}">${b.__band.label}</span></td>
+          <td><b>${esc(b.fileNo)}</b></td>
+          <td><span class="pill-src ${esc(b.source)}">${esc(b.source)}</span></td>
+          <td>${fmtDate(b.tripStart)}<div class="hint">${b.__band.key!=='bdone' && daysTo(b.tripStart)!==null ? (daysTo(b.tripStart)>=0? daysTo(b.tripStart)+' days to go':'in progress'):''}</div></td>
+          <td style="max-width:230px">${esc((b.pax||'—').slice(0,58))}</td>
+          <td><span class="prog"><i style="width:${pct}%"></i></span><span class="prog-label">${done}/${act.length}</span></td>
+          <td>${pend? '<b style="color:var(--warn)">'+pend+'</b>':'<span style="color:var(--ok)">0</span>'}</td>
+          ${finUnlocked()? `<td>${has? (net<0?'<span class="var-pos">▲ '+fmtEUR(Math.abs(net))+'</span>':'<span class="var-neg">▼ '+fmtEUR(net)+'</span>') : '<span style="color:var(--faint)">—</span>'}</td>` : ''}
+        </tr>`;
+      }).join('') || '<tr><td colspan="8" class="empty">No bookings match these filters.</td></tr>'}
+      </tbody>
+    </table></div>`;
+}
+
+/* Rebuilds only the results table + count — leaves the toolbar/search inputs intact so focus is never lost while typing. */
+function renderBookingRows(){
+  const rows = computeBookingRows();
+  const countEl = document.getElementById('bk-count');
+  if (countEl) countEl.textContent = `${rows.length} of ${state.bookings.length} bookings shown`;
+  const resEl = document.getElementById('bk-results');
+  if (resEl) resEl.innerHTML = bookingRowsHTML(rows);
+}
+
+function renderBookings(){
+  const el = document.getElementById('view-bookings');
+  const f = state.filters;
+  const months = [...new Set(state.bookings.map(b=>(b.tripStart||'').slice(0,7)).filter(Boolean))].sort();
+  const rows = computeBookingRows();
 
   el.innerHTML = `
     <div class="flex-between" style="margin-bottom:6px">
-      <div><h2 class="vtitle">Bookings</h2><div class="vsub">${rows.length} of ${state.bookings.length} bookings shown</div></div>
+      <div><h2 class="vtitle">Bookings</h2><div class="vsub" id="bk-count">${rows.length} of ${state.bookings.length} bookings shown</div></div>
       <button class="btn" onclick="openAddBooking()">+ New booking</button>
     </div>
     <div class="toolbar">
-      <input type="search" placeholder="Search file no, pax, activity, supplier, ref…" value="${esc(f.q)}" oninput="state.filters.q=this.value;renderBookings()">
+      <input type="search" placeholder="Search file no, pax, activity, supplier, ref…" value="${esc(f.q)}" oninput="state.filters.q=this.value;renderBookingRows()">
       <select onchange="state.filters.band=this.value;renderBookings()">
         <option value="">All T-bands</option>
         ${[['recent72','New · 72h'],['btrav','Travelling'],['b15','T-15'],['b30','T-30'],['b45','T-45'],['b60','T-60'],['blater','60+ days'],['bdone','Completed']].map(([k,l])=>`<option value="${k}" ${f.band===k?'selected':''}>${l}</option>`).join('')}
@@ -1336,31 +1379,10 @@ function renderBookings(){
         <option value="">Any month</option>
         ${months.map(m=>{const [y,mm]=m.split('-');const l=new Date(y,mm-1,1).toLocaleDateString('en-GB',{month:'short',year:'numeric'});return `<option value="${m}" ${f.month===m?'selected':''}>${l}</option>`;}).join('')}
       </select>
-      <input placeholder="Activity keyword (e.g. Eiffel)" style="max-width:190px" value="${esc(f.activityKw)}" oninput="state.filters.activityKw=this.value;renderBookings()">
+      <input placeholder="Activity keyword (e.g. Eiffel)" style="max-width:190px" value="${esc(f.activityKw)}" oninput="state.filters.activityKw=this.value;renderBookingRows()">
       ${(f.q||f.band||f.source||f.status||f.service||f.month||f.activityKw||f.era)?'<button class="btn ghost small" onclick="clearFilters()">Clear</button>':''}
     </div>
-    <div class="tbl-scroll"><table class="bk">
-      <thead><tr><th>Band</th><th>File No</th><th>Source</th><th>Trip start</th><th>Pax</th><th>Reconfirmation progress</th><th>Pending</th>${finUnlocked()? '<th>Net variance</th>' : ''}</tr></thead>
-      <tbody>
-      ${rows.map(b=>{
-        const act = activeComps(b), done = act.filter(c=>c.status==='Confirmed'||c.status==='Reconfirmed').length;
-        const pend = outstandingComps(b).length;
-        let net=0, has=false;
-        act.forEach(c=>{const v=compVariance(c); if(v){net+=v.eur;has=true;}});
-        const pct = act.length? Math.round(done/act.length*100):0;
-        return `<tr onclick="openBooking('${esc(b.id)}')">
-          <td><span class="badge ${b.__band.key}">${b.__band.label}</span></td>
-          <td><b>${esc(b.fileNo)}</b></td>
-          <td><span class="pill-src ${esc(b.source)}">${esc(b.source)}</span></td>
-          <td>${fmtDate(b.tripStart)}<div class="hint">${b.__band.key!=='bdone' && daysTo(b.tripStart)!==null ? (daysTo(b.tripStart)>=0? daysTo(b.tripStart)+' days to go':'in progress'):''}</div></td>
-          <td style="max-width:230px">${esc((b.pax||'—').slice(0,58))}</td>
-          <td><span class="prog"><i style="width:${pct}%"></i></span><span class="prog-label">${done}/${act.length}</span></td>
-          <td>${pend? '<b style="color:var(--warn)">'+pend+'</b>':'<span style="color:var(--ok)">0</span>'}</td>
-          ${finUnlocked()? `<td>${has? (net<0?'<span class="var-pos">▲ '+fmtEUR(Math.abs(net))+'</span>':'<span class="var-neg">▼ '+fmtEUR(net)+'</span>') : '<span style="color:var(--faint)">—</span>'}</td>` : ''}
-        </tr>`;
-      }).join('') || '<tr><td colspan="8" class="empty">No bookings match these filters.</td></tr>'}
-      </tbody>
-    </table></div>`;
+    <div id="bk-results">${bookingRowsHTML(rows)}</div>`;
 }
 function clearFilters(){
   state.filters = { q:'', source:'', status:'', service:'', band:'', month:'', activityKw:'', era:'' };
@@ -1477,6 +1499,14 @@ function closeModal(){
 function refreshBookingModal(){
   const b = getBooking(openBookingId);
   if (!b){ closeModal(); return; }
+  /* Auto-sort by travel date unless the user has chosen manual ordering.
+     Default (undefined sortMode) = auto by date. Done in-place, no save —
+     manual arrangements are the only ones persisted as an explicit order. */
+  if (b.sortMode !== 'manual'){
+    remapAttachmentIdx(b.id, ()=>{
+      b.components.sort((x,y)=> (x.travelDate||'').localeCompare(y.travelDate||''));
+    });
+  }
   const band = tband(b);
   const act = activeComps(b), done = act.filter(c=>c.status==='Confirmed'||c.status==='Reconfirmed').length;
   let net=0, has=false;
@@ -1509,8 +1539,9 @@ function refreshBookingModal(){
     </div>
     <div class="fld"><label>Pax (No &amp; names)</label><input value="${esc(b.pax)}" onchange="editHead('pax',this.value)"></div>
 
-    <div class="section-lbl flex-between"><span>Components (${b.components.length})</span>
-      <span><button class="btn ghost small" onclick="toggleAllComps()">Expand / collapse all</button>
+    <div class="section-lbl flex-between"><span>Components (${b.components.length}) <span class="hint" style="font-weight:400">· order: ${b.sortMode==='manual'?'manual':'auto by travel date'}</span></span>
+      <span><button class="btn ghost small" onclick="toggleCompSort()" title="Switch between automatic date order and your own manual arrangement">${b.sortMode==='manual'?'Sort by date':'Manual order'}</button>
+      <button class="btn ghost small" onclick="toggleAllComps()">Expand / collapse all</button>
       <button class="btn small" onclick="addComponent()">+ Add component</button></span></div>
     ${b.components.map((c,i)=>renderComp(b,c,i)).join('') || '<div class="empty">No components yet — add the first one.</div>'}
 
@@ -1536,8 +1567,13 @@ function renderComp(b,c,i){
   const sp = c.sixPoint||{};
   const spOk = sixPointComplete(c);
   const cAtts = Object.values(state.attachments).filter(a=>a.bookingId===b.id && a.compIdx===i);
+  const nComp = b.components.length;
   return `<div class="comp ${isOpen?'open':''}" id="comp${i}">
     <div class="comp-head" onclick="toggleComp(${i})">
+      <span class="reorder" onclick="event.stopPropagation()">
+        <button class="ord-btn" title="Move up" onclick="event.stopPropagation();moveComp(${i},-1)" ${i===0?'disabled':''}>▲</button>
+        <button class="ord-btn" title="Move down" onclick="event.stopPropagation();moveComp(${i},1)" ${i===nComp-1?'disabled':''}>▼</button>
+      </span>
       <span class="date">${fmtDate(c.travelDate)}</span>
       <span class="chip svc">${esc(c.service)}</span>
       <span class="act">${esc(c.activity||'(untitled)')}</span>
@@ -1560,10 +1596,19 @@ function renderComp(b,c,i){
         <div><label>Voucher</label><select onchange="editComp(${i},'voucher',this.value)">${['No voucher required','Voucher Required'].map(v=>`<option ${c.voucher===v?'selected':''}>${v}</option>`).join('')}</select></div>
       </div>
       <div class="field-grid">
-        <div><label>Quoted (system rate)</label><input value="${esc(c.quoted)}" placeholder="e.g. 726.67 EUR" onchange="editComp(${i},'quoted',this.value)"></div>
-        <div><label>Estimated</label><input value="${esc(c.estimated)}" onchange="editComp(${i},'estimated',this.value)"></div>
-        <div><label>Paid (actual)</label><input value="${esc(c.paid)}" onchange="editComp(${i},'paid',this.value)"></div>
-        <div><label>Variance</label><div style="padding-top:8px">${varianceHTML(c)}</div></div>
+        <div><label>Quoted (system rate)</label><span style="display:flex;gap:4px">
+          <input value="${esc(c.quoted)}" placeholder="e.g. 726.67 EUR" style="flex:1" onchange="editComp(${i},'quoted',this.value)">
+          <select style="width:64px" onchange="setCompCurrency(${i},'quoted',this.value)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
+        </span></div>
+        <div><label>Estimated</label><span style="display:flex;gap:4px">
+          <input value="${esc(c.estimated)}" style="flex:1" onchange="editComp(${i},'estimated',this.value)">
+          <select style="width:64px" onchange="setCompCurrency(${i},'estimated',this.value)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
+        </span></div>
+        <div><label>Paid (actual)</label><span style="display:flex;gap:4px">
+          <input value="${esc(c.paid)}" style="flex:1" onchange="editComp(${i},'paid',this.value)">
+          <select style="width:64px" onchange="setCompCurrency(${i},'paid',this.value)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
+        </span></div>
+        <div><label>Variance (auto, in EUR — Nexus base currency)</label><div style="padding-top:8px">${varianceHTML(c)}</div></div>
       </div>
       <div class="field-grid">
         <div><label>Remarks — Ken</label><textarea onchange="editComp(${i},'remarksKen',this.value)">${esc(c.remarksKen)}</textarea></div>
@@ -1622,6 +1667,19 @@ function editComp(i, field, val){
   saveBooking(b, `${label}: ${field} → "${String(val).slice(0,40)}"`);
   refreshBookingModal();
 }
+/* Currency dropdown next to a pricing field: keeps the number, swaps/adds the
+   currency code so the existing parseMoney/toEUR pipeline picks it up and
+   converts against the admin FX rates automatically. */
+function setCompCurrency(i, field, cur){
+  if (!cur) return;
+  const b = getBooking(openBookingId);
+  const c = b.components[i];
+  const parsed = parseMoney(c[field]);
+  const num = parsed ? parsed.val : '';
+  c[field] = num===''? cur : `${num} ${cur}`;
+  saveBooking(b, `${(c.activity||'component '+(i+1)).slice(0,36)}: ${field} currency → ${cur}`);
+  refreshBookingModal();
+}
 function editSix(i, field, val){
   const b = getBooking(openBookingId);
   const c = b.components[i];
@@ -1652,9 +1710,60 @@ function removeComponent(i){
   const b = getBooking(openBookingId);
   const c = b.components[i];
   if (!confirm('Remove component "'+(c.activity||'untitled')+'"? Consider setting status to Cancelled instead to keep the audit trail.')) return;
-  b.components.splice(i,1);
+  remapAttachmentIdx(b.id, ()=>{ b.components.splice(i,1); }, i);
   openCompSet.delete(i);
   saveBooking(b, `Removed component: ${(c.activity||'untitled').slice(0,50)}`);
+  refreshBookingModal();
+}
+
+/* ---- Itinerary ordering: auto-sort by travel date + manual up/down override ----
+   Attachments reference components by array index (compIdx), so every reorder
+   remaps those indices to keep files attached to the right component. */
+function attachmentsFor(bookingId){
+  return Object.values(state.attachments).filter(a=>a.bookingId===bookingId && a.compIdx!=null && a.compIdx!==-1);
+}
+/* Re-tag attachment compIdx values after the array mutation given by fn.
+   We snapshot the component object each attachment points at, run fn, then
+   point each attachment at the component's new position. */
+function remapAttachmentIdx(bookingId, fn, removedIdx){
+  const b = getBooking(bookingId);
+  const atts = attachmentsFor(bookingId);
+  const snap = atts.map(a=>({a, comp: b.components[a.compIdx]}));
+  fn();
+  snap.forEach(({a, comp})=>{
+    if (comp === undefined){ return; }
+    const ni = b.components.indexOf(comp);
+    if (ni === -1){ /* the component it pointed at was removed */ a.compIdx = -1; }
+    else a.compIdx = ni;
+  });
+}
+function sortComponentsByDate(b){
+  remapAttachmentIdx(b.id, ()=>{
+    b.components.sort((x,y)=> (x.travelDate||'').localeCompare(y.travelDate||''));
+  });
+}
+function toggleCompSort(){
+  const b = getBooking(openBookingId);
+  b.sortMode = (b.sortMode==='manual') ? 'date' : 'manual';
+  if (b.sortMode==='date'){ sortComponentsByDate(b); }
+  saveBooking(b, `Itinerary order set to ${b.sortMode==='date'?'auto (by travel date)':'manual'}`);
+  openCompSet = new Set();
+  refreshBookingModal();
+}
+function moveComp(i, dir){
+  const b = getBooking(openBookingId);
+  const j = i + dir;
+  if (j < 0 || j >= b.components.length) return;
+  b.sortMode = 'manual';
+  remapAttachmentIdx(b.id, ()=>{
+    const t = b.components[i]; b.components[i] = b.components[j]; b.components[j] = t;
+  });
+  /* keep the same components expanded after the swap */
+  const wasI = openCompSet.has(i), wasJ = openCompSet.has(j);
+  openCompSet.delete(i); openCompSet.delete(j);
+  if (wasI) openCompSet.add(j);
+  if (wasJ) openCompSet.add(i);
+  saveBooking(b, `Reordered itinerary (moved component ${dir<0?'up':'down'})`);
   refreshBookingModal();
 }
 function addComment(){
@@ -3986,6 +4095,7 @@ function renderSettings(){
       </div>
       <div class="card">
         <h3>Exchange rates → EUR (for savings/loss maths)</h3>
+        <div class="hint" style="margin-bottom:8px"><b>Nexus base currency: EUR.</b> Every amount you enter (any currency) is converted to EUR here before comparing quoted vs paid/estimated.</div>
         ${Object.keys(state.fx).map(c=>`
           <div class="log-row"><span class="who">${c}</span>
           <span class="what" style="max-width:140px"><input type="number" step="0.0001" value="${state.fx[c]}" ${isAdmin?'':'disabled'} onchange="state.fx['${c}']=parseFloat(this.value)||0;saveFx()"></span>
