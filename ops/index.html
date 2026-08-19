@@ -849,7 +849,8 @@ const REQUEST_CATEGORIES = {
   quote:      {label:'Quote / product loading',   short:'Quote & loading',   color:'var(--gold)',    defaultEmail:'quoteseu@orn.com'},
   support:    {label:'Booking admin / operational',short:'Booking admin',    color:'var(--muted)',   defaultEmail:'supporteu@orn.com'},
   customer:   {label:'Customer contact / support', short:'Customer',         color:'#5b8def',         defaultEmail:'customereu@orn.com'},
-  escalation: {label:'Escalation',                 short:'Escalation',       color:'var(--danger)',  defaultEmail:'escalationseu@orn.com'}
+  escalation: {label:'Escalation',                 short:'Escalation',       color:'var(--danger)',  defaultEmail:'escalationseu@orn.com'},
+  management: {label:'Management escalation',      short:'Mgmt escalation',  color:'#8b1a3f',         defaultEmail:'escalationseu@orn.com'}
 };
 function categoryEmail(cat){
   const cfg = (state.notify && state.notify.categoryEmails) || {};
@@ -1176,6 +1177,25 @@ function renderDashboard(){
         </span>
         ${urgent.length? `<span class="sb-urgent">⚠ ${urgent.length} urgent — guest travelling</span>`:''}
         ${(state.notify&&state.notify.supportChannelUrl)?`<a class="sb-go" style="text-decoration:none" href="${esc(state.notify.supportChannelUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Slack ↗</a>`:''}
+        <span class="sb-go">Open queue →</span>
+      </div>`;
+    })()}
+
+    ${(()=>{
+      const open = state.quotes.filter(q=>q.status!=='Won' && q.status!=='Lost');
+      const urgent = open.filter(q=>(q.category||'quote')==='quote' && ['qtravel','q7'].includes(qband(q).key));
+      const esc2 = q=>['escalation','management'].includes(q.category);
+      const latest = state.quotes.slice().sort((a,z)=>(z.ts||'').localeCompare(a.ts||''))[0];
+      return `<div class="support-banner ${open.some(esc2)?'has-open':''}" onclick="switchView('quotes')" title="Open the Requests queue">
+        <span>
+          <div class="sb-title">${open.some(esc2)? '📋 Requests — escalation needs attention' : '📋 Requests'}</div>
+          <div class="sb-sub">One form, routed by type · orngroup.github.io/ornoperations/quote-request/</div>
+          ${latest? `<div class="sb-latest">Latest: <b>${esc((latest.destination||latest.subject||'').slice(0,44))}</b> — ${esc(latest.name||'')} (${esc((REQUEST_CATEGORIES[latest.category||'quote']||{}).short||'')})</div>`:''}
+        </span>
+        <span class="sb-stats">
+          ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span class="sb-box"><div class="n">${state.quotes.filter(q=>(q.category||'quote')===k && q.status!=='Won' && q.status!=='Lost').length}</div><div class="l">${esc(c.short)}</div></span>`).join('')}
+        </span>
+        ${urgent.length? `<span class="sb-urgent">⚠ ${urgent.length} quote request${urgent.length===1?'':'s'} — travelling within 7 days</span>`:''}
         <span class="sb-go">Open queue →</span>
       </div>`;
     })()}
@@ -2619,7 +2639,7 @@ function renderQuotes(){
     </div>
     <div class="hint" style="margin-bottom:10px">Share the request form link with clients/agents/Sales Support instead of email — they pick the request type, it lands here sorted by urgency, and alerts the right inbox (${Object.values(REQUEST_CATEGORIES).map(c=>c.defaultEmail).join(' · ')}).</div>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Type</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>Ref</th><th>Status</th><th>Doc</th><th>Notes</th><th></th></tr></thead>
+      <thead><tr><th>Type</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
       <tbody>${rows.map(q=>{
         const rc = receiptFor(q.id);
         const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
@@ -2627,10 +2647,12 @@ function renderQuotes(){
         <td><span class="badge" style="background:${cat.color};color:#fff">${esc(cat.short)}</span></td>
         <td>${q.category==='quote'?`<span class="badge" style="background:${QBAND_COLOR[q.__band.key]};color:#fff">${esc(q.__band.label)}</span>`:'<span class="hint">—</span>'}</td>
         <td>${q.category==='quote'?fmtDate(q.departureDate):'—'}</td>
-        <td><b>${esc(q.name)}</b><div class="hint">${esc(q.email)}${q.phone?' · '+esc(q.phone):''}${q.agency?' · '+esc(q.agency):''}</div></td>
-        <td style="max-width:220px">${esc((q.destination||q.subject||'').slice(0,60))}${q.serviceRequired?'<div class="hint">'+esc(q.serviceRequired.slice(0,50))+'</div>':''}<div class="hint">${esc((q.message||'').slice(0,80))}</div></td>
+        <td><b>${esc(q.name)}</b><div class="hint">${esc(q.email)}${q.phone?' · '+esc(q.phone):''}${q.agency?' · '+esc(q.agency):''}${q.replyEmail && q.replyEmail!==q.email?'<br>Reply to: '+esc(q.replyEmail):''}</div></td>
+        <td style="max-width:220px">${esc((q.destination||q.subject||'').slice(0,60))}${q.serviceRequired?'<div class="hint">'+esc(q.serviceRequired.slice(0,50))+'</div>':''}<div class="hint">${esc((q.message||'').slice(0,80))}</div>${q.category==='management'?`<div class="hint" style="margin-top:4px"><b>Impact:</b> ${esc((q.impact||'—').slice(0,60))}<br><b>Tried:</b> ${esc((q.triedAlready||'—').slice(0,60))}</div>`:''}</td>
         <td>${esc(q.pax||'—')}${q.childAges?' ('+esc(q.childAges)+')':''}</td>
-        <td>${esc(q.bookingRef||'—')}</td>
+        <td><input value="${esc(q.ornRef||'')}" placeholder="ORN..." onchange="editQuote('${q.id}','ornRef',this.value)" style="min-width:100px"></td>
+        <td><input value="${esc(q.tagRef||q.bookingRef||'')}" placeholder="TAG..." onchange="editQuote('${q.id}','tagRef',this.value)" style="min-width:100px"></td>
+        <td><input value="${esc(q.specialNotes||'')}" placeholder="Special notes" onchange="editQuote('${q.id}','specialNotes',this.value)" style="min-width:140px"></td>
         <td><select onchange="editQuote('${q.id}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td>${rc
           ? `<button class="btn ghost small" onclick="downloadAtt('${rc.id}')">📎 View</button> <button class="btn danger small" onclick="deleteAtt('${rc.id}');renderQuotes()">✕</button>`
@@ -2638,7 +2660,7 @@ function renderQuotes(){
           <button class="btn ghost small" onclick="printQuotePdf('${q.id}')">PDF</button></td>
         <td><input value="${esc(q.internalNotes||'')}" placeholder="Internal notes" onchange="editQuote('${q.id}','internalNotes',this.value)" style="min-width:130px"></td>
         <td><button class="btn danger small" onclick="delQuote('${q.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="11" class="empty">No requests in this category yet.</td></tr>'}</tbody>
+      </tr>`;}).join('') || '<tr><td colspan="13" class="empty">No requests in this category yet.</td></tr>'}</tbody>
     </table></div>`;
 }
 function editQuote(id, f, v){
