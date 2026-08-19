@@ -428,6 +428,7 @@ const SERVICES = ['TOUR','TRANSPORT','TRAIN','FERRY','FLIGHT','CRUISE','HOTEL','
 const REFUND_STATUSES = ['Under process','Processed','Credit used','Rejected'];
 const SEED_VERSION = 5; // bump when the embedded seed data changes
 const CARDS = ['Raj Kumar Mastercard','Sahil Nijhawan Credit Card (Australia)'];
+const RECHARGE_TO = ['','ORN AUS','ORN IND'];
 const DIR_PASS = 'ORNCONFIDENTIAL';
 const FIN_PASS = 'ORNHISTORY'; // retired — access is now by user
 const DIR_USERS = ['AK','KN','RK','SN'];
@@ -2392,38 +2393,51 @@ function renderCards(){
   });
   const receipts = Object.values(state.attachments).filter(a=>String(a.bookingId||'').startsWith('CARD-'));
   const receiptFor = id => receipts.find(a=>a.bookingId==='CARD-'+id);
+  const alreadyImported = state.cards.some(c=>c.importBatch==='aug2026stmt');
 
   el.innerHTML = `
     <div class="flex-between" style="margin-bottom:6px">
       <div><h2 class="vtitle">Credit card payments</h2>
       <div class="vsub">Supplier payments made by card · ${rows.length} transactions ·
       ${CARDS.map(c=>`${esc(c.split(' ')[0])}: <b>${fmtEUR(totals[c]||0)}</b>`).join(' &nbsp;·&nbsp; ')} (EUR equivalent)</div></div>
-      <button class="btn" onclick="addCardTxn()">+ New transaction</button>
+      <span style="display:flex;gap:8px">
+      ${!alreadyImported? `<button class="btn ghost" onclick="importAugCardsStatement()">Import Aug 2026 statement (19)</button>` : ''}
+      <button class="btn ghost" onclick="exportCardsCSV()">Export CSV</button>
+      <button class="btn ghost" onclick="exportCardsPDF()">Export PDF</button>
+      <button class="btn" onclick="addCardTxn()">+ New transaction</button></span>
     </div>
     <datalist id="fileNos">${state.bookings.map(b=>`<option value="${esc(b.fileNo)}">`).join('')}</datalist>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Date</th><th>Card</th><th>Booking (File No)</th><th>What was paid</th><th>Amount</th><th>Notes</th><th>Receipt</th><th></th></tr></thead>
+      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>GBP debited</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
       <tbody>${rows.map(r=>{
         const rc = receiptFor(r.id);
         const b = state.bookings.find(b=>b.fileNo===r.fileNo);
         return `<tr>
         <td><input type="date" value="${esc(r.date)}" onchange="editCardTxn('${r.id}','date',this.value)" style="min-width:130px"></td>
-        <td><select onchange="editCardTxn('${r.id}','card',this.value)">${CARDS.map(c=>`<option ${r.card===c?'selected':''}>${c}</option>`).join('')}</select></td>
+        <td><input type="date" value="${esc(r.serviceDate||'')}" onchange="editCardTxn('${r.id}','serviceDate',this.value)" style="min-width:130px"></td>
         <td><input list="fileNos" value="${esc(r.fileNo)}" onchange="editCardTxn('${r.id}','fileNo',this.value)" style="min-width:135px">
           ${b?`<div class="hint" style="cursor:pointer" onclick="openBooking('${esc(b.id)}')">open booking →</div>`:''}</td>
         <td><input value="${esc(r.desc)}" placeholder="e.g. Amitours transfer FCO" onchange="editCardTxn('${r.id}','desc',this.value)" style="min-width:190px"></td>
+        <td><input value="${esc(r.supplier||'')}" placeholder="Supplier name" onchange="editCardTxn('${r.id}','supplier',this.value)" style="min-width:130px"></td>
+        <td><input value="${esc(r.company||'')}" placeholder="Company / address / email" onchange="editCardTxn('${r.id}','company',this.value)" style="min-width:190px"></td>
+        <td><input value="${esc(r.leadPax||'')}" placeholder="Lead pax name" onchange="editCardTxn('${r.id}','leadPax',this.value)" style="min-width:140px"></td>
         <td><input value="${esc(r.amount)}" placeholder="e.g. 280 EUR" onchange="editCardTxn('${r.id}','amount',this.value)" style="min-width:95px"></td>
+        <td><input value="${esc(r.gbpAmount||'')}" placeholder="if known" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:85px"></td>
+        <td><select onchange="editCardTxn('${r.id}','card',this.value)">${CARDS.map(c=>`<option ${r.card===c?'selected':''}>${c}</option>`).join('')}</select></td>
+        <td><input value="${esc(r.cardLast4||'')}" placeholder="1234" maxlength="4" onchange="editCardTxn('${r.id}','cardLast4',this.value)" style="min-width:60px"></td>
+        <td><input value="${esc(r.ourRef||'')}" placeholder="e.g. Tim" onchange="editCardTxn('${r.id}','ourRef',this.value)" style="min-width:80px"></td>
+        <td><select onchange="editCardTxn('${r.id}','rechargeTo',this.value)">${RECHARGE_TO.map(x=>`<option value="${x}" ${(r.rechargeTo||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select></td>
         <td><input value="${esc(r.notes)}" onchange="editCardTxn('${r.id}','notes',this.value)" style="min-width:130px"></td>
         <td>${rc
           ? `<button class="btn ghost small" onclick="downloadAtt('${rc.id}')">📎 View</button> <button class="btn danger small" onclick="deleteAtt('${rc.id}');renderCards()">✕</button>`
           : `<button class="btn ghost small" onclick="uploadReceipt('${r.id}')">Upload</button>`}</td>
         <td><button class="btn danger small" onclick="delCardTxn('${r.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="8" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
+      </tr>`;}).join('') || '<tr><td colspan="16" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
     </table></div>
-    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Receipts are capped at 730 KB per file; a phone photo of a receipt is fine, just use a compressed/medium size.</div>`;
+    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Receipts are capped at 900 KB per file; a phone photo of a receipt is fine, just use a compressed/medium size.</div>`;
 }
 function addCardTxn(){
-  saveListItem('cards', {date: todayISO(), card: CARDS[0], fileNo:'', desc:'', amount:'', notes:''});
+  saveListItem('cards', {date: todayISO(), serviceDate:'', card: CARDS[0], cardLast4:'', fileNo:'', desc:'', supplier:'', company:'', leadPax:'', amount:'', gbpAmount:'', ourRef:'', rechargeTo:'', notes:''});
   logActivity('-', 'Card transaction added');
 }
 function editCardTxn(id, f, v){
@@ -2437,6 +2451,93 @@ function delCardTxn(id){
   if (rc) deleteAttSilent(rc.id);
   deleteListItem('cards', id);
   logActivity('-', 'Card transaction deleted');
+}
+/* ---- CSV export ---- */
+function csvEscape(v){
+  const s = String(v==null?'':v);
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function exportCardsCSV(){
+  const cols = [
+    ['date','Transaction date'],['serviceDate','Service date'],['fileNo','TAG/ORN Ref'],['desc','Description of service'],
+    ['supplier','Supplier'],['company','Company / address / email contact'],['leadPax','Lead pax name'],
+    ['amount','Euro cost'],['gbpAmount','GBP debited'],['card','Card used'],['cardLast4','Card last 4'],
+    ['ourRef','Our ref'],['rechargeTo','Recharge to'],['notes','Notes']
+  ];
+  const rows = state.cards.slice().sort((a,z)=>(z.date||'').localeCompare(a.date||''));
+  const lines = [cols.map(c=>csvEscape(c[1])).join(',')];
+  rows.forEach(r=> lines.push(cols.map(c=>csvEscape(r[c[0]])).join(',')));
+  const blob = new Blob([lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ORN-card-charges-'+todayISO()+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  logActivity('-', 'Card charges exported to CSV');
+}
+/* ---- PDF export (print-to-PDF, same pattern as other reports) ---- */
+function exportCardsPDF(){
+  const rows = state.cards.slice().sort((a,z)=>(z.date||'').localeCompare(a.date||''));
+  const totals = {};
+  rows.forEach(r=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; if(e!=null) totals[r.card]=(totals[r.card]||0)+e; });
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html lang="en-GB"><head><meta charset="UTF-8"><title>ORN Card Charges ${todayISO()}</title>
+  <style>
+    body{font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;color:#1d2433;margin:24px;font-size:10.5px;line-height:1.4}
+    h1{font-size:19px;margin:0 0 2px} .sub{color:#5f6880;font-size:11px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse}
+    th{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:#5f6880;text-align:left;padding:5px 6px;border-bottom:2px solid #d5dae3}
+    td{padding:5px 6px;border-bottom:1px solid #eceff4;font-size:9.5px}
+    .foot{color:#9aa2b5;font-size:10px;margin-top:20px}
+    @media print{ body{margin:10mm} .noprint{display:none} table{font-size:8.5px} }
+  </style></head><body>
+  <div class="noprint" style="background:#fdf6e3;border:1px solid #a9801e;border-radius:8px;padding:10px 14px;margin-bottom:16px">
+    Press <b>Ctrl/Cmd + P</b> and choose <b>Save as PDF</b> to export this report. <button onclick="window.print()">Print / Save PDF</button></div>
+  <h1>ORN Credit Card Charges</h1>
+  <div class="sub">${rows.length} transactions · ${CARDS.map(c=>c.split(' ')[0]+': '+fmtEUR(totals[c]||0)).join(' · ')} (EUR equivalent) · generated ${new Date().toLocaleString('en-GB')}</div>
+  <table><tr><th>Txn date</th><th>Service date</th><th>Ref</th><th>Description</th><th>Supplier</th><th>Lead pax</th><th>EUR</th><th>GBP</th><th>Card</th><th>Last 4</th><th>Our ref</th><th>Recharge</th></tr>
+  ${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.serviceDate||'')}</td><td>${esc(r.fileNo)}</td><td>${esc(r.desc)}</td><td>${esc(r.supplier||'')}</td><td>${esc(r.leadPax||'')}</td><td>${esc(r.amount)}</td><td>${esc(r.gbpAmount||'')}</td><td>${esc((r.card||'').split(' ')[0])}</td><td>${esc(r.cardLast4||'')}</td><td>${esc(r.ourRef||'')}</td><td>${esc(r.rechargeTo||'')}</td></tr>`).join('') || '<tr><td colspan="12">No transactions.</td></tr>'}
+  </table>
+  <div class="foot">ORN Operations &amp; Reconfirmation Hub · confidential</div>
+  <script>setTimeout(()=>{ try{window.print()}catch(e){} }, 400);<\/script>
+  </body></html>`);
+  w.document.close();
+  logActivity('-', 'Card charges exported to PDF');
+}
+/* ---- One-off import of the Aug 2026 statement Ajay pasted in chat ---- */
+const AUG2026_CARD_STATEMENT = [
+  {date:'2026-08-13', fileNo:'TAG0132KZ9K', desc:'Venice Water Taxi', supplier:'VWTC', amount:'80.00 EUR', ourRef:'Tim'},
+  {date:'2026-08-13', fileNo:'TAG0147XXNZ', desc:'', supplier:'Mint', amount:'557.19 GBP', ourRef:'Ken'},
+  {date:'2026-08-14', fileNo:'TAG014EL6KY', desc:'Delphi Skip the Line', supplier:'GYG', amount:'424.22 EUR', ourRef:'Tim'},
+  {date:'2026-08-14', fileNo:'TAG014EL6KY', desc:'Acropolis, Plaka Ancient Greek Agora', supplier:'Viator', amount:'564.99 EUR', ourRef:'Tim'},
+  {date:'2026-08-14', fileNo:'TAG014EL6KY', desc:'Athens By Night', supplier:'Viator', amount:'166.03 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0146DE3J', desc:'Semi-private Colosseum Guided Tour - Private Small Group Tour', supplier:'Viator', amount:'211.81 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0146DE3J', desc:'Twilight Trastevere Rome Food Tour - Shared Tour (Walking Tour)', supplier:'Viator', amount:'274.95 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0146DE3J', desc:'Accademia Museum - Shared Tour', supplier:'Viator', amount:'101.81 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0146DE3J', desc:'Barcelona Highlights with Sagrada', supplier:'GYG', amount:'39.96 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0146DE3J', desc:'Rome to Florence Train one way std class', supplier:'Rail Europe', amount:'66.25 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0146DE3J', desc:'Florence to Venice + Return Journey Train', supplier:'Rail Europe', amount:'146.05 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG014EL6KY', desc:'V hotel Delphi to Athens Lodge', supplier:'Transfeero', amount:'259.80 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG014EL6KY', desc:'Thesaloniki Skip the Line', supplier:'VWTC', amount:'179.68 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0132K90M', desc:'Venice Water Taxi', supplier:'VWTC', amount:'80.00 EUR', ourRef:'Tim'},
+  {date:'2026-08-17', fileNo:'TAG0147XXNZ', desc:'', supplier:'Facture', amount:'23.27 EUR', ourRef:'Ken'},
+  {date:'2026-08-18', fileNo:'TAG012B75ZG', desc:'Transfer from naples to sorrento (redo)', supplier:'Transfeero', amount:'191.88 EUR', ourRef:'Tim'},
+  {date:'2026-08-18', fileNo:'TAG012B75ZG', desc:'Transfer from sorrento to naples (redo)', supplier:'Transfeero', amount:'182.11 EUR', ourRef:'Tim'},
+  {date:'2026-08-18', fileNo:'ORN014CLW54', desc:'Transfer from EDI to Yotel', supplier:'ATT', amount:'50.55 EUR', ourRef:'Tim'},
+  {date:'2026-08-18', fileNo:'ORN014CLW54', desc:'Transfer from Dublin hotel to DUB', supplier:'Hoppa', amount:'59.25 EUR', ourRef:'Tim'},
+  {date:'2026-08-19', fileNo:'TAG012B75ZG', desc:'Transfer from hotel to train station Paris (redo)', supplier:'Transfeero', amount:'71.80 EUR', ourRef:'Tim'}
+];
+function importAugCardsStatement(){
+  if (state.cards.some(c=>c.importBatch==='aug2026stmt')){ alert('This statement has already been imported.'); return; }
+  if (!confirm('Import '+AUG2026_CARD_STATEMENT.length+' transactions from the Aug 2026 statement? Service date, company/contact, lead pax, GBP amount, card, card last 4 and recharge-to will be left blank for Tim to fill in.')) return;
+  AUG2026_CARD_STATEMENT.forEach(row=>{
+    saveListItem('cards', {
+      date: row.date, serviceDate:'', card: CARDS[0], cardLast4:'', fileNo: row.fileNo, desc: row.desc,
+      supplier: row.supplier, company:'', leadPax:'', amount: row.amount, gbpAmount:'', ourRef: row.ourRef,
+      rechargeTo:'', notes:'', importBatch:'aug2026stmt'
+    });
+  });
+  logActivity('-', 'Imported Aug 2026 card statement ('+AUG2026_CARD_STATEMENT.length+' txns)');
+  renderCards();
 }
 function deleteAttSilent(id){
   if (FIRE) DB.collection(COLL.attachments).doc(id).delete();
@@ -4011,7 +4112,7 @@ function renderHelp(){
 
     <div class="card" style="margin-bottom:14px">
       <h3>6 · Credit card payments</h3>
-      <p>Every supplier payment made on card gets logged here: date, which card (Raj Kumar Mastercard or Sahil Nijhawan Credit Card Australia), the booking file number (it autocompletes), what was paid, the amount and a receipt photo or PDF. Running totals per card sit at the top. Log the transaction the same day you make the payment — reconciliation depends on it.</p>
+      <p>Every supplier payment made on card gets logged here: transaction date, service date, which card (and last 4 digits), the booking file number (it autocompletes), supplier, company/address/email contact, lead pax name, the amount in EUR (and GBP if known), who logged it, who we're recharging (ORN AUS / ORN IND, if applicable), and a receipt photo or PDF. Running totals per card sit at the top. Use Export CSV or Export PDF to pull a report. Log the transaction the same day you make the payment — reconciliation depends on it.</p>
     </div>
 
     <div class="card" style="margin-bottom:14px">
