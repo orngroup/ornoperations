@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORN Europe — Request Form</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:linear-gradient(160deg,#0b0d12 0%,#1a2233 60%,#2d4468 100%);min-height:100vh;color:#1d2433;display:flex;align-items:center;justify-content:center;padding:26px 14px}
+.wrap{width:min(660px,100%)}
+.brand{color:#fff;text-align:center;margin-bottom:20px}
+.brand .orn{font-weight:800;font-size:30px;letter-spacing:7px}
+.brand .sub{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;opacity:.8;margin-top:2px;color:#c9a94f}
+.card{background:#fff;border-radius:16px;padding:30px 32px;box-shadow:0 14px 44px rgba(4,7,13,.5)}
+h1{font-size:19px;font-weight:800;margin-bottom:4px}
+.lead{color:#5f6880;font-size:12.5px;margin-bottom:18px}
+label{display:block;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#5f6880;font-weight:700;margin:12px 0 4px}
+input,select,textarea{width:100%;font-family:inherit;font-size:13.5px;border:1px solid #d5dae3;border-radius:8px;padding:10px 12px;outline:none;background:#fff;color:#1d2433}
+input:focus,select:focus,textarea:focus{border-color:#a9801e}
+textarea{min-height:100px;resize:vertical}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:560px){.row2,.row3{grid-template-columns:1fr}}
+.btn{margin-top:20px;width:100%;background:#a9801e;color:#fff;border:none;border-radius:8px;padding:13px;font-weight:800;font-size:14px;letter-spacing:.3px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.55;cursor:wait}
+.err{color:#cc3a24;font-size:12.5px;min-height:16px;margin-top:8px}
+.ok{ text-align:center;padding:16px 0 }
+.ok .tick{font-size:44px}
+.ok h2{font-size:18px;margin:8px 0 4px}
+.ok p{color:#5f6880;font-size:13px}
+.ok .ref{display:inline-block;margin:12px 0;background:#faf5e8;border:1px dashed #c9a94f;color:#a9801e;font-weight:800;font-size:16px;letter-spacing:1px;border-radius:8px;padding:8px 18px}
+.hint{color:#9aa2b5;font-size:11px;margin-top:14px;text-align:center}
+.cat-note{background:#f4f6fa;border-radius:8px;padding:10px 12px;font-size:12px;color:#5f6880;margin-top:8px;display:none}
+.cat-note.active{display:block}
+.cat-note b{color:#1d2433}
+.hidden{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="orn">ORN</div><div class="sub">Europe · Sales &amp; Operations</div></div>
+  <div class="card" id="formCard">
+    <h1>Send a request</h1>
+    <div class="lead">One form for everything — pick the type of request below and it goes straight to the right team, tracked from submission through to resolution. No more email or WhatsApp.</div>
+
+    <label>Type of request *</label>
+    <select id="fCategory" onchange="onCategoryChange()">
+      <option value="">Select…</option>
+      <option value="quote">Quote / product loading — car rental, special transfer, missing product, anything Sales Support can't load</option>
+      <option value="support">Existing booking admin / operational query</option>
+      <option value="customer">Customer contact / support</option>
+      <option value="escalation">Escalation</option>
+    </select>
+    <div class="cat-note" id="noteQuote">Sales Support should load whatever they can first — use this for anything missing or needing European product/loading (car rental, special transfers, transfer with stops, non-primary locations, etc). Routed to <b>quoteseu@orn.com</b>. Response same-day, or within 24h where sourcing is required.</div>
+    <div class="cat-note" id="noteSupport">For existing bookings — administration and operational queries. Routed to <b>supporteu@orn.com</b>.</div>
+    <div class="cat-note" id="noteCustomer">For customer contact and support queries. Routed to <b>customereu@orn.com</b>.</div>
+    <div class="cat-note" id="noteEscalation">Goes directly to Ken and Ajay. Routed to <b>escalationseu@orn.com</b>.</div>
+
+    <div class="row2">
+      <div><label>Your name *</label><input id="fName" placeholder="e.g. Jackie Smith"></div>
+      <div><label>Your email *</label><input id="fEmail" type="email" placeholder="you@company.com"></div>
+    </div>
+    <div class="row2">
+      <div><label>Phone</label><input id="fPhone" placeholder="e.g. +44 7700 900000"></div>
+      <div><label>Agency / client (if any)</label><input id="fAgency" placeholder="e.g. TAG USA, Best in Travel"></div>
+    </div>
+
+    <div id="quoteFields">
+      <div class="row3">
+        <div><label>Travel date *</label><input id="fDeparture" type="date"></div>
+        <div><label>Pax numbers *</label><input id="fPax" placeholder="e.g. 2 adults"></div>
+        <div><label>Child ages</label><input id="fChildAges" placeholder="e.g. 6, 9 (leave blank if none)"></div>
+      </div>
+      <div class="row2">
+        <div><label>Destination *</label><input id="fDestination" placeholder="e.g. Rome, Florence, Venice"></div>
+        <div><label>Service required *</label><input id="fServiceRequired" placeholder="e.g. car rental, private transfer w/ stops"></div>
+      </div>
+      <label>Booking / quote reference</label><input id="fBookingRefQ" placeholder="e.g. TAG0146DE3J (if this relates to an existing booking)">
+    </div>
+
+    <div id="otherFields" class="hidden">
+      <label>Booking / quote reference</label><input id="fBookingRefO" placeholder="e.g. TAG0146DE3J">
+      <label>Subject *</label><input id="fSubject" placeholder="One line summary">
+    </div>
+
+    <label id="lblMessage">Details *</label><textarea id="fMessage" placeholder="Give as much detail as possible."></textarea>
+    <div class="err" id="fErr"></div>
+    <button class="btn" id="fSubmit" onclick="submitRequest()">Submit request</button>
+    <div class="hint">Submitted requests appear instantly on the Europe team's dashboard and are tracked to resolution.</div>
+  </div>
+  <div class="card ok" id="okCard" style="display:none">
+    <div class="tick">✅</div>
+    <h2>Request received</h2>
+    <p>Your reference — quote it in any follow-up:</p>
+    <div class="ref" id="okRef"></div>
+    <p>The Europe team has it now and will come back to you at <b id="okEmail"></b>.</p>
+    <button class="btn" onclick="location.reload()">Submit another request</button>
+  </div>
+</div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyALzMtGRDrQyJOC-KbtqvCPgo1NBQ6Vdpc",
+  authDomain: "orn-operations.firebaseapp.com",
+  projectId: "orn-operations",
+  storageBucket: "orn-operations.firebasestorage.app",
+  messagingSenderId: "470679786970",
+  appId: "1:470679786970:web:28945392beb13b9a2d5ce3"
+};
+let DB=null, FIRE=false;
+try{
+  if (typeof firebase !== 'undefined' && firebase && firebase.initializeApp){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    DB = firebase.firestore(); FIRE = true;
+  }
+}catch(e){ console.error(e); }
+
+function v(id){ const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+function onCategoryChange(){
+  const cat = v('fCategory');
+  ['noteQuote','noteSupport','noteCustomer','noteEscalation'].forEach(n=>document.getElementById(n).classList.remove('active'));
+  const noteMap = {quote:'noteQuote', support:'noteSupport', customer:'noteCustomer', escalation:'noteEscalation'};
+  if (noteMap[cat]) document.getElementById(noteMap[cat]).classList.add('active');
+
+  const isQuote = cat==='quote';
+  document.getElementById('quoteFields').classList.toggle('hidden', !isQuote);
+  document.getElementById('otherFields').classList.toggle('hidden', isQuote || !cat);
+  document.getElementById('lblMessage').textContent = isQuote ? 'Anything else the team should know' : 'Details *';
+}
+
+function submitRequest(){
+  const err = document.getElementById('fErr');
+  err.textContent = '';
+  const category = v('fCategory');
+  const name=v('fName'), email=v('fEmail'), message=v('fMessage');
+  if (!category){ err.textContent='Please choose the type of request.'; return; }
+  if (!name || !email){ err.textContent='Please complete your name and email.'; return; }
+  if (!/\S+@\S+\.\S+/.test(email)){ err.textContent='Please enter a valid email address.'; return; }
+
+  const isQuote = category==='quote';
+  let payload = { category, name, email, phone: v('fPhone'), agency: v('fAgency'), message };
+
+  if (isQuote){
+    const departureDate=v('fDeparture'), pax=v('fPax'), destination=v('fDestination'), serviceRequired=v('fServiceRequired');
+    if (!departureDate || !pax || !destination || !serviceRequired){ err.textContent='Please complete travel date, pax numbers, destination and service required.'; return; }
+    payload.departureDate = departureDate; payload.pax = pax; payload.childAges = v('fChildAges');
+    payload.destination = destination; payload.serviceRequired = serviceRequired; payload.bookingRef = v('fBookingRefQ');
+  } else {
+    const subject = v('fSubject');
+    if (!subject || !message){ err.textContent='Please complete subject and details.'; return; }
+    payload.subject = subject; payload.bookingRef = v('fBookingRefO');
+  }
+
+  if (!FIRE){ err.textContent='Cannot reach the ORN system right now (network issue). Please email the Europe team instead, or retry shortly.'; return; }
+  const btn = document.getElementById('fSubmit');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  const ref = 'QT-' + Date.now().toString(36).toUpperCase().slice(-6);
+  const id = 'qt' + Date.now() + Math.random().toString(36).slice(2,6);
+  const q = { id, ref, ts:new Date().toISOString(), status:'New', internalNotes:'', alerted:false, ...payload };
+  DB.collection('recon_quotes').doc(id).set(q).then(()=>{
+    document.getElementById('formCard').style.display='none';
+    document.getElementById('okRef').textContent = ref;
+    document.getElementById('okEmail').textContent = email;
+    document.getElementById('okCard').style.display='block';
+  }).catch(e=>{
+    console.error(e);
+    btn.disabled=false; btn.textContent='Submit request';
+    err.textContent='Submission failed — please retry, or email the Europe team.';
+  });
+}
+</script>
+</body>
+</html>
