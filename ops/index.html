@@ -168,6 +168,9 @@ h2.vtitle{font-size:17px;font-weight:700;margin-bottom:4px}
 .toolbar select{width:auto;min-width:130px}
 table.bk{width:100%;border-collapse:collapse;background:var(--panel);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
 table.bk th{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px;border-bottom:1px solid var(--line2);font-weight:700;background:var(--panel2)}
+table.bk th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+table.bk th.sortable:hover{color:var(--text)}
+table.bk th.sortable.sorted{color:var(--gold)}
 table.bk td{padding:10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}
 table.bk tbody tr{cursor:pointer}
 table.bk tbody tr:hover{background:var(--gold-bg)}
@@ -429,6 +432,7 @@ const REFUND_STATUSES = ['Under process','Processed','Credit used','Rejected'];
 const SEED_VERSION = 5; // bump when the embedded seed data changes
 const CARDS = ['Raj Kumar Mastercard','Sahil Nijhawan Credit Card (Australia)'];
 const RECHARGE_TO = ['','ORN AUS','ORN IND'];
+let cardSort = {key:'date', dir:'desc'};
 const DIR_PASS = 'ORNCONFIDENTIAL';
 const FIN_PASS = 'ORNHISTORY'; // retired — access is now by user
 const DIR_USERS = ['AK','KN','RK','SN'];
@@ -2380,10 +2384,32 @@ function renderTakeover(){
 }
 
 /* ================= CREDIT CARD PAYMENTS ================= */
+/* column definitions: [sort key, header label] — drives both header render and sorting */
+const CARD_COLS = [
+  ['date','Txn date'],['serviceDate','Service date'],['fileNo','TAG/ORN Ref'],['desc','Description of service'],
+  ['supplier','Supplier'],['company','Company / address / email contact'],['leadPax','Lead pax name'],
+  ['amount','Euro cost'],['gbpAmount','GBP debited'],['card','Card used'],['cardLast4','Card last 4'],
+  ['ourRef','Our ref'],['rechargeTo','Recharge to'],['notes','Notes']
+];
+/* numeric columns are sorted by real value, not text */
+function cardSortVal(r, key){
+  if (key==='amount'){ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e==null?-Infinity:e; }
+  if (key==='gbpAmount'){ const m=parseMoney(r.gbpAmount); return m?m.n:-Infinity; }
+  return String(r[key]==null?'':r[key]).toLowerCase();
+}
+function sortCards(key){
+  if (cardSort.key===key) cardSort.dir = cardSort.dir==='asc' ? 'desc' : 'asc';
+  else cardSort = {key, dir: (key==='date'||key==='serviceDate'||key==='amount'||key==='gbpAmount') ? 'desc' : 'asc'};
+  renderCards();
+}
 function renderCards(){
   const el = document.getElementById('view-cards');
   if (!el) return;
-  const rows = state.cards.slice().sort((a,z)=>(z.date||'').localeCompare(a.date||''));
+  const dir = cardSort.dir==='asc' ? 1 : -1;
+  const rows = state.cards.slice().sort((a,z)=>{
+    const av = cardSortVal(a, cardSort.key), zv = cardSortVal(z, cardSort.key);
+    if (av<zv) return -1*dir; if (av>zv) return 1*dir; return 0;
+  });
   // totals per card in EUR
   const totals = {};
   rows.forEach(r=>{
@@ -2394,6 +2420,8 @@ function renderCards(){
   const receipts = Object.values(state.attachments).filter(a=>String(a.bookingId||'').startsWith('CARD-'));
   const receiptFor = id => receipts.find(a=>a.bookingId==='CARD-'+id);
   const alreadyImported = state.cards.some(c=>c.importBatch==='aug2026stmt');
+  const arrow = key => cardSort.key===key ? (cardSort.dir==='asc'?' ▲':' ▼') : '';
+  const headCells = CARD_COLS.map(c=>`<th class="sortable${cardSort.key===c[0]?' sorted':''}" onclick="sortCards('${c[0]}')">${esc(c[1])}${arrow(c[0])}</th>`).join('');
 
   el.innerHTML = `
     <div class="flex-between" style="margin-bottom:6px">
@@ -2404,11 +2432,11 @@ function renderCards(){
       ${!alreadyImported? `<button class="btn ghost" onclick="importAugCardsStatement()">Import Aug 2026 statement (19)</button>` : ''}
       <button class="btn ghost" onclick="exportCardsCSV()">Export CSV</button>
       <button class="btn ghost" onclick="exportCardsPDF()">Export PDF</button>
-      <button class="btn" onclick="addCardTxn()">+ New transaction</button></span>
+      <button class="btn" onclick="openCardModal()">+ New transaction</button></span>
     </div>
     <datalist id="fileNos">${state.bookings.map(b=>`<option value="${esc(b.fileNo)}">`).join('')}</datalist>
-    <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>GBP debited</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
+    <div class="tbl-scroll"><table class="bk static" style="min-width:1780px">
+      <thead><tr>${headCells}<th>Confirmation / receipt</th><th></th></tr></thead>
       <tbody>${rows.map(r=>{
         const rc = receiptFor(r.id);
         const b = state.bookings.find(b=>b.fileNo===r.fileNo);
@@ -2422,7 +2450,7 @@ function renderCards(){
         <td><input value="${esc(r.company||'')}" placeholder="Company / address / email" onchange="editCardTxn('${r.id}','company',this.value)" style="min-width:190px"></td>
         <td><input value="${esc(r.leadPax||'')}" placeholder="Lead pax name" onchange="editCardTxn('${r.id}','leadPax',this.value)" style="min-width:140px"></td>
         <td><input value="${esc(r.amount)}" placeholder="e.g. 280 EUR" onchange="editCardTxn('${r.id}','amount',this.value)" style="min-width:95px"></td>
-        <td><input value="${esc(r.gbpAmount||'')}" placeholder="if known" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:85px"></td>
+        <td><input value="${esc(r.gbpAmount||'')}" placeholder="if known" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:95px"></td>
         <td><select onchange="editCardTxn('${r.id}','card',this.value)">${CARDS.map(c=>`<option ${r.card===c?'selected':''}>${c}</option>`).join('')}</select></td>
         <td><input value="${esc(r.cardLast4||'')}" placeholder="1234" maxlength="4" onchange="editCardTxn('${r.id}','cardLast4',this.value)" style="min-width:60px"></td>
         <td><input value="${esc(r.ourRef||'')}" placeholder="e.g. Tim" onchange="editCardTxn('${r.id}','ourRef',this.value)" style="min-width:80px"></td>
@@ -2431,15 +2459,59 @@ function renderCards(){
         <td>${rc
           ? `<button class="btn ghost small" onclick="downloadAtt('${rc.id}')">📎 View</button> <button class="btn danger small" onclick="deleteAtt('${rc.id}');renderCards()">✕</button>`
           : `<button class="btn ghost small" onclick="uploadReceipt('${r.id}')">Upload</button>`}</td>
-        <td><button class="btn danger small" onclick="delCardTxn('${r.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="16" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
+        <td style="white-space:nowrap"><button class="btn ghost small" onclick="openCardModal('${r.id}')">Edit</button> <button class="btn danger small" onclick="delCardTxn('${r.id}')">✕</button></td>
+      </tr>`;}).join('') || `<tr><td colspan="${CARD_COLS.length+2}" class="empty">No card transactions recorded yet.</td></tr>`}</tbody>
     </table></div>
-    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Receipts are capped at 900 KB per file; a phone photo of a receipt is fine, just use a compressed/medium size.</div>`;
+    <div class="hint" style="margin-top:8px">Click any column heading to sort · scroll sideways to see every column · use <b>Edit</b> or <b>+ New transaction</b> to add or change entries in a pop-up form, or edit inline. Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Receipts are capped at 900 KB per file; a phone photo of a receipt is fine, just use a compressed/medium size.</div>`;
 }
-function addCardTxn(){
-  saveListItem('cards', {date: todayISO(), serviceDate:'', card: CARDS[0], cardLast4:'', fileNo:'', desc:'', supplier:'', company:'', leadPax:'', amount:'', gbpAmount:'', ourRef:'', rechargeTo:'', notes:''});
-  logActivity('-', 'Card transaction added');
+/* ---- add / edit a card transaction in a pop-up form ---- */
+function openCardModal(id){
+  const editing = !!id;
+  const r = editing ? state.cards.find(x=>x.id===id) : null;
+  if (editing && !r) return;
+  const v = f => esc(r ? (r[f]||'') : '');
+  const cardOpts = CARDS.map(c=>`<option ${r&&r.card===c?'selected':(!r&&c===CARDS[0]?'selected':'')}>${esc(c)}</option>`).join('');
+  const rechargeOpts = RECHARGE_TO.map(x=>`<option value="${x}" ${r&&(r.rechargeTo||'')===x?'selected':''}>${x||'—'}</option>`).join('');
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><div><h2>${editing?'Edit card transaction':'New card transaction'}</h2>
+      <div class="meta">${editing?'Update the details below.':'Log a supplier payment made on a company card.'}</div></div>
+      <button class="close-x" onclick="closeModal()">✕</button></div>
+    <datalist id="cmFileNos">${state.bookings.map(b=>`<option value="${esc(b.fileNo)}">`).join('')}</datalist>
+    <div class="field-grid">
+      <div><label>Txn date</label><input id="cmDate" type="date" value="${editing?v('date'):todayISO()}"></div>
+      <div><label>Service date</label><input id="cmServiceDate" type="date" value="${v('serviceDate')}"></div>
+      <div><label>TAG/ORN Ref</label><input id="cmFileNo" list="cmFileNos" value="${v('fileNo')}" placeholder="e.g. TAG0146DE3J"></div>
+      <div><label>Card used</label><select id="cmCard">${cardOpts}</select></div>
+      <div><label>Card last 4</label><input id="cmCardLast4" maxlength="4" value="${v('cardLast4')}" placeholder="1234"></div>
+      <div><label>Euro cost</label><input id="cmAmount" value="${v('amount')}" placeholder="e.g. 280 EUR"></div>
+      <div><label>GBP debited</label><input id="cmGbp" value="${v('gbpAmount')}" placeholder="if known"></div>
+      <div><label>Our ref</label><input id="cmOurRef" value="${v('ourRef')}" placeholder="e.g. Tim"></div>
+      <div><label>Recharge to</label><select id="cmRecharge">${rechargeOpts}</select></div>
+      <div><label>Supplier</label><input id="cmSupplier" value="${v('supplier')}" placeholder="Supplier name"></div>
+      <div><label>Lead pax name</label><input id="cmLeadPax" value="${v('leadPax')}" placeholder="Lead pax name"></div>
+    </div>
+    <div class="fld"><label>Description of service</label><input id="cmDesc" value="${v('desc')}" placeholder="e.g. Amitours transfer FCO"></div>
+    <div class="fld"><label>Company / address / email contact</label><input id="cmCompany" value="${v('company')}" placeholder="Company / address / email"></div>
+    <div class="fld"><label>Notes</label><input id="cmNotes" value="${v('notes')}"></div>
+    <div class="flex-between"><button class="btn ghost" onclick="closeModal()">Cancel</button>
+    <button class="btn" onclick="saveCardModal(${editing?`'${id}'`:'null'})">${editing?'Save changes':'Add transaction'}</button></div>`;
+  document.getElementById('modalBack').classList.add('open');
 }
+function saveCardModal(id){
+  const g = i => document.getElementById(i).value;
+  const base = id ? Object.assign({}, state.cards.find(x=>x.id===id)) : {};
+  const item = Object.assign(base, {
+    date:g('cmDate'), serviceDate:g('cmServiceDate'), fileNo:g('cmFileNo').trim().toUpperCase(),
+    desc:g('cmDesc').trim(), supplier:g('cmSupplier').trim(), company:g('cmCompany').trim(),
+    leadPax:g('cmLeadPax').trim(), amount:g('cmAmount').trim(), gbpAmount:g('cmGbp').trim(),
+    card:g('cmCard'), cardLast4:g('cmCardLast4').trim(), ourRef:g('cmOurRef').trim(),
+    rechargeTo:g('cmRecharge'), notes:g('cmNotes').trim()
+  });
+  saveListItem('cards', item);
+  logActivity(item.fileNo||'-', id ? 'Card transaction edited' : 'Card transaction added');
+  closeModal();
+}
+function addCardTxn(){ openCardModal(); }
 function editCardTxn(id, f, v){
   const r = state.cards.find(x=>x.id===id); if (!r) return;
   r[f]=v; saveListItem('cards', r);
