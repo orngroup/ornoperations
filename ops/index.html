@@ -2055,22 +2055,14 @@ function delRefund(id){
 
 /* ================= TRANSFER SUPPLIERS ================= */
 let supQ = '';
-function renderSuppliers(){
-  const el = document.getElementById('view-suppliers');
-  if (!el) return;
+function computeSupplierRows(){
   const q = supQ.toLowerCase();
-  const rows = state.suppliers
+  return state.suppliers
     .filter(s=>!q || [s.destination,s.driver,s.company,s.contact,s.email].join(' ').toLowerCase().includes(q))
     .sort((a,z)=>(a.destination||'').localeCompare(z.destination||''));
-  el.innerHTML = `
-    <div class="flex-between" style="margin-bottom:6px">
-      <div><h2 class="vtitle">Transfer suppliers</h2><div class="vsub">Driver &amp; operator directory by destination · ${state.suppliers.length} entries</div></div>
-      <button class="btn" onclick="addSupplier()">+ New supplier</button>
-    </div>
-    <div class="toolbar"><input type="search" placeholder="Search destination, driver, company…" value="${esc(supQ)}" oninput="supQ=this.value;renderSuppliers()"></div>
-    <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Destination</th><th>Driver</th><th>Company</th><th>Contact</th><th>Email</th><th>Payout</th><th></th></tr></thead>
-      <tbody>${rows.map(s=>`<tr>
+}
+function supplierRowsHTML(rows){
+  return rows.map(s=>`<tr>
         <td><input value="${esc(s.destination)}" onchange="editSupplier('${s.id}','destination',this.value)" style="min-width:130px"></td>
         <td><input value="${esc(s.driver)}" onchange="editSupplier('${s.id}','driver',this.value)" style="min-width:120px"></td>
         <td><input value="${esc(s.company)}" onchange="editSupplier('${s.id}','company',this.value)" style="min-width:140px"></td>
@@ -2078,7 +2070,25 @@ function renderSuppliers(){
         <td><input value="${esc(s.email)}" onchange="editSupplier('${s.id}','email',this.value)" style="min-width:180px"></td>
         <td><input value="${esc(s.payout)}" onchange="editSupplier('${s.id}','payout',this.value)" style="min-width:80px"></td>
         <td><button class="btn danger small" onclick="delSupplier('${s.id}')">✕</button></td>
-      </tr>`).join('') || '<tr><td colspan="7" class="empty">No suppliers match.</td></tr>'}</tbody>
+      </tr>`).join('') || '<tr><td colspan="7" class="empty">No suppliers match.</td></tr>';
+}
+function renderSupplierRows(){
+  const el = document.getElementById('sup-results');
+  if (el) el.innerHTML = supplierRowsHTML(computeSupplierRows());
+}
+function renderSuppliers(){
+  const el = document.getElementById('view-suppliers');
+  if (!el) return;
+  const rows = computeSupplierRows();
+  el.innerHTML = `
+    <div class="flex-between" style="margin-bottom:6px">
+      <div><h2 class="vtitle">Transfer suppliers</h2><div class="vsub">Driver &amp; operator directory by destination · ${state.suppliers.length} entries</div></div>
+      <button class="btn" onclick="addSupplier()">+ New supplier</button>
+    </div>
+    <div class="toolbar"><input type="search" placeholder="Search destination, driver, company…" value="${esc(supQ)}" oninput="supQ=this.value;renderSupplierRows()"></div>
+    <div class="tbl-scroll"><table class="bk static">
+      <thead><tr><th>Destination</th><th>Driver</th><th>Company</th><th>Contact</th><th>Email</th><th>Payout</th><th></th></tr></thead>
+      <tbody id="sup-results">${supplierRowsHTML(rows)}</tbody>
     </table></div>`;
 }
 function editSupplier(id, f, v){
@@ -2253,12 +2263,9 @@ function grpFmtDate(d){
   const [y,m,dd] = d.slice(0,10).split('-');
   return new Date(y,m-1,dd).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 }
-function renderGroups(){
-  const el = document.getElementById('view-groups');
-  if (!el) return;
+function computeGroupRows(){
   const f = grpFilters;
   let rows = state.groups.slice();
-  const customers = [...new Set(state.groups.map(g=>(g.customer||'').trim()).filter(Boolean))].sort();
   if (f.status==='live') rows = rows.filter(g=>!/abort|cancel/i.test(g.status||''));
   else if (f.status) rows = rows.filter(g=>String(g.status||'')===f.status);
   if (f.customer) rows = rows.filter(g=>(g.customer||'').trim()===f.customer);
@@ -2270,6 +2277,32 @@ function renderGroups(){
   rows.sort((a,z)=> key==='value'
     ? (grpNum(a.value)-grpNum(z.value))*f.dir
     : String(a[key]||'').localeCompare(String(z[key]||''))*f.dir );
+  return rows;
+}
+function groupRowsHTML(rows){
+  return rows.map(g=>`<tr onclick="openGroupModal('${g.id}')">
+        <td style="white-space:nowrap"><b>${esc(g.bookingNr)}</b>${grpNexus(g)?` <a href="${esc(grpNexus(g))}" target="_blank" rel="noopener" title="Open in Nexus" onclick="event.stopPropagation()" style="text-decoration:none">↗</a>`:''}</td>
+        <td style="min-width:200px">${esc(grpTitle(g)).slice(0,64)}</td>
+        <td>${esc(g.customer)}</td>
+        <td style="white-space:nowrap">${grpFmtDate(g.travelDate)}</td>
+        <td style="min-width:150px">${esc((g.location||'').slice(0,48))}${(g.location||'').length>48?'…':''}</td>
+        <td style="white-space:nowrap">${esc((g.finalPax||g.pax||'').split('\n')[0].slice(0,26))||'—'}</td>
+        <td style="white-space:nowrap">${grpNum(g.value)?('AU$ '+grpNum(g.value).toLocaleString('en-GB',{maximumFractionDigits:0})):'—'}</td>
+        <td style="white-space:nowrap">${grpOutstanding(g)?`<span style="color:var(--warn);font-weight:700">AU$ ${grpOutstanding(g).toLocaleString('en-GB',{maximumFractionDigits:0})}</span>`:'—'}</td>
+        <td>${grpStatusBadge(g.status)}</td>
+      </tr>`).join('') || '<tr><td colspan="9" class="empty">No group bookings match the current filters.</td></tr>';
+}
+function renderGroupRows(){
+  const el = document.getElementById('grp-results');
+  if (!el) return;
+  el.innerHTML = groupRowsHTML(computeGroupRows());
+}
+function renderGroups(){
+  const el = document.getElementById('view-groups');
+  if (!el) return;
+  const f = grpFilters;
+  const rows = computeGroupRows();
+  const customers = [...new Set(state.groups.map(g=>(g.customer||'').trim()).filter(Boolean))].sort();
   const arrow = k => f.sort===k ? (f.dir===1?' ▲':' ▼') : '';
   const live = state.groups.filter(g=>!/abort|cancel/i.test(g.status||''));
   const totVal = live.reduce((n,g)=>n+grpNum(g.value),0);
@@ -2282,7 +2315,7 @@ function renderGroups(){
       <button class="btn" onclick="addGroup()">+ New group</button>
     </div>
     <div class="toolbar">
-      <input type="search" placeholder="Search booking nr, tour, customer, location, notes…" value="${esc(f.q)}" oninput="grpFilters.q=this.value;renderGroups()">
+      <input type="search" placeholder="Search booking nr, tour, customer, location, notes…" value="${esc(f.q)}" oninput="grpFilters.q=this.value;renderGroupRows()">
       <select onchange="grpFilters.status=this.value;renderGroups()">
         <option value="">All statuses</option>
         <option value="live" ${f.status==='live'?'selected':''}>Live (excl. cancelled)</option>
@@ -2307,17 +2340,7 @@ function renderGroups(){
         <th>Outstanding</th>
         <th onclick="grpSort('status')" style="cursor:pointer">Status${arrow('status')}</th>
       </tr></thead>
-      <tbody>${rows.map(g=>`<tr onclick="openGroupModal('${g.id}')">
-        <td style="white-space:nowrap"><b>${esc(g.bookingNr)}</b>${grpNexus(g)?` <a href="${esc(grpNexus(g))}" target="_blank" rel="noopener" title="Open in Nexus" onclick="event.stopPropagation()" style="text-decoration:none">↗</a>`:''}</td>
-        <td style="min-width:200px">${esc(grpTitle(g)).slice(0,64)}</td>
-        <td>${esc(g.customer)}</td>
-        <td style="white-space:nowrap">${grpFmtDate(g.travelDate)}</td>
-        <td style="min-width:150px">${esc((g.location||'').slice(0,48))}${(g.location||'').length>48?'…':''}</td>
-        <td style="white-space:nowrap">${esc((g.finalPax||g.pax||'').split('\n')[0].slice(0,26))||'—'}</td>
-        <td style="white-space:nowrap">${grpNum(g.value)?('AU$ '+grpNum(g.value).toLocaleString('en-GB',{maximumFractionDigits:0})):'—'}</td>
-        <td style="white-space:nowrap">${grpOutstanding(g)?`<span style="color:var(--warn);font-weight:700">AU$ ${grpOutstanding(g).toLocaleString('en-GB',{maximumFractionDigits:0})}</span>`:'—'}</td>
-        <td>${grpStatusBadge(g.status)}</td>
-      </tr>`).join('') || '<tr><td colspan="9" class="empty">No group bookings match the current filters.</td></tr>'}</tbody>
+      <tbody id="grp-results">${groupRowsHTML(rows)}</tbody>
     </table></div>`;
 }
 function grpSort(k){
@@ -3118,6 +3141,37 @@ function tryUnlockDirectory(){
   return false;
 }
 
+function computeDirectoryRows(){
+  const f = dirFilters;
+  let rows = state.directory.slice();
+  if (f.cat) rows = rows.filter(r=>r.category===f.cat);
+  if (f.dest) rows = rows.filter(r=>(r.destination||'').toLowerCase().includes(f.dest.toLowerCase()));
+  if (f.src) rows = rows.filter(r=>r.source===f.src);
+  if (f.login==='yes') rows = rows.filter(r=>r.username||r.password);
+  if (f.login==='no') rows = rows.filter(r=>!r.username&&!r.password);
+  if (f.q){
+    const q = f.q.toLowerCase();
+    rows = rows.filter(r=>[r.name,r.contact,r.email,r.phone,r.website,r.notes,r.destination,r.username,r.account,r.commission,r.api].join(' ').toLowerCase().includes(q));
+  }
+  const key = f.sort;
+  rows.sort((a,z)=>String(a[key]||'').localeCompare(String(z[key]||''))*f.dir || a.name.localeCompare(z.name));
+  return rows;
+}
+function directoryRowsHTML(rows){
+  return rows.slice(0,500).map(r=>`<tr>
+        <td style="min-width:170px"><b>${esc(r.name)}</b>${r.contact?`<div class="hint">${esc(r.contact)}</div>`:''}</td>
+        <td style="max-width:180px">${esc((r.destination||'—').slice(0,48))}</td>
+        <td><span class="chip svc">${esc(r.category)}</span></td>
+        <td style="white-space:nowrap">${esc(r.phone||'—')}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc((r.email||'—').split(String.fromCharCode(10))[0].slice(0,44))}</td>
+        <td>${(r.username||r.password)?'<span class="badge bdone">yes</span>':'<span style="color:var(--faint)">—</span>'}</td>
+        <td><button class="btn ghost small" onclick="openDirModal('${r.id}')">Open</button></td>
+      </tr>`).join('') || '<tr><td colspan="7" class="empty">No suppliers match these filters.</td></tr>';
+}
+function renderDirectoryRows(){
+  const el = document.getElementById('dir-results');
+  if (el) el.innerHTML = directoryRowsHTML(computeDirectoryRows());
+}
 function renderDirectory(){
   const el = document.getElementById('view-directory');
   if (!el) return;
@@ -3136,18 +3190,7 @@ function renderDirectory(){
   const f = dirFilters;
   const dests = [...new Set(state.directory.map(r=>(r.destination||'').trim()).filter(Boolean))].sort();
   const srcs = [...new Set(state.directory.map(r=>r.source).filter(Boolean))].sort();
-  let rows = state.directory.slice();
-  if (f.cat) rows = rows.filter(r=>r.category===f.cat);
-  if (f.dest) rows = rows.filter(r=>(r.destination||'').toLowerCase().includes(f.dest.toLowerCase()));
-  if (f.src) rows = rows.filter(r=>r.source===f.src);
-  if (f.login==='yes') rows = rows.filter(r=>r.username||r.password);
-  if (f.login==='no') rows = rows.filter(r=>!r.username&&!r.password);
-  if (f.q){
-    const q = f.q.toLowerCase();
-    rows = rows.filter(r=>[r.name,r.contact,r.email,r.phone,r.website,r.notes,r.destination,r.username,r.account,r.commission,r.api].join(' ').toLowerCase().includes(q));
-  }
-  const key = f.sort;
-  rows.sort((a,z)=>String(a[key]||'').localeCompare(String(z[key]||''))*f.dir || a.name.localeCompare(z.name));
+  const rows = computeDirectoryRows();
   const arrow = k => f.sort===k ? (f.dir===1?' ▲':' ▼') : '';
 
   el.innerHTML = `
@@ -3158,12 +3201,12 @@ function renderDirectory(){
       <button class="btn" onclick="addDirEntry()">+ New supplier</button></span>
     </div>
     <div class="toolbar">
-      <input type="search" placeholder="Search anything — name, contact, email, notes, login…" value="${esc(f.q)}" oninput="dirFilters.q=this.value;renderDirectory()">
+      <input type="search" placeholder="Search anything — name, contact, email, notes, login…" value="${esc(f.q)}" oninput="dirFilters.q=this.value;renderDirectoryRows()">
       <select onchange="dirFilters.cat=this.value;renderDirectory()">
         <option value="">All types</option>
         ${DIR_CATS.map(c=>`<option ${f.cat===c?'selected':''}>${c}</option>`).join('')}
       </select>
-      <input list="dirDests" placeholder="Destination / country" style="max-width:180px" value="${esc(f.dest)}" oninput="dirFilters.dest=this.value;renderDirectory()">
+      <input list="dirDests" placeholder="Destination / country" style="max-width:180px" value="${esc(f.dest)}" oninput="dirFilters.dest=this.value;renderDirectoryRows()">
       <datalist id="dirDests">${dests.slice(0,300).map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
       <select onchange="dirFilters.login=this.value;renderDirectory()">
         <option value="">Login: any</option>
@@ -3183,15 +3226,7 @@ function renderDirectory(){
         <th style="cursor:pointer" onclick="dirSort('category')">Type${arrow('category')}</th>
         <th>Phone</th><th>Email</th><th>Login</th><th></th>
       </tr></thead>
-      <tbody>${rows.slice(0,500).map(r=>`<tr>
-        <td style="min-width:170px"><b>${esc(r.name)}</b>${r.contact?`<div class="hint">${esc(r.contact)}</div>`:''}</td>
-        <td style="max-width:180px">${esc((r.destination||'—').slice(0,48))}</td>
-        <td><span class="chip svc">${esc(r.category)}</span></td>
-        <td style="white-space:nowrap">${esc(r.phone||'—')}</td>
-        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc((r.email||'—').split(String.fromCharCode(10))[0].slice(0,44))}</td>
-        <td>${(r.username||r.password)?'<span class="badge bdone">yes</span>':'<span style="color:var(--faint)">—</span>'}</td>
-        <td><button class="btn ghost small" onclick="openDirModal('${r.id}')">Open</button></td>
-      </tr>`).join('') || '<tr><td colspan="7" class="empty">No suppliers match these filters.</td></tr>'}</tbody>
+      <tbody id="dir-results">${directoryRowsHTML(rows)}</tbody>
     </table></div>
     ${rows.length>500?'<div class="hint">Showing first 500 — narrow the filters to see the rest.</div>':''}`;
 }
@@ -3699,11 +3734,8 @@ function setMailClient(c){
 /* ================= CONFIRMATIONS QUEUE (component-level worklist) ================= */
 let cqFilters = { q:'', supplier:'', service:'', source:'', band:'', month:'', dest:'' };
 
-function renderConfirmations(){
-  const el = document.getElementById('view-confirmations');
-  if (!el) return;
+function computeConfirmRows(){
   const f = cqFilters;
-  // Build queue: every Pending/Issue component on bookings not yet completed
   const queue = [];
   state.bookings.forEach(b=>{
     const band = tband(b);
@@ -3712,9 +3744,6 @@ function renderConfirmations(){
       if (c.status==='Pending' || c.status==='Issue') queue.push({b, c, i, band});
     });
   });
-  const suppliers = [...new Set(queue.map(r=>(r.c.supplier||'').trim()).filter(Boolean))].sort();
-  const months = [...new Set(queue.map(r=>(r.c.travelDate||'').slice(0,7)).filter(Boolean))].sort();
-
   let rows = queue;
   if (f.supplier) rows = rows.filter(r=>(r.c.supplier||'')===f.supplier);
   if (f.service) rows = rows.filter(r=>r.c.service===f.service);
@@ -3724,6 +3753,37 @@ function renderConfirmations(){
   if (f.dest){ const q=f.dest.toLowerCase(); rows = rows.filter(r=>((r.c.activity||'')+' '+(r.c.supplier||'')).toLowerCase().includes(q)); }
   if (f.q){ const q=f.q.toLowerCase(); rows = rows.filter(r=>[r.b.fileNo,r.b.pax,r.c.activity,r.c.supplier,r.c.bookingRef].join(' ').toLowerCase().includes(q)); }
   rows.sort((a,z)=> a.band.order - z.band.order || (a.c.travelDate||'').localeCompare(z.c.travelDate||''));
+  return {queue, rows};
+}
+function confirmRowsHTML(rows){
+  return rows.slice(0,400).map(r=>`<tr>
+        <td><span class="badge ${r.band.key}">${r.band.label}</span></td>
+        <td style="white-space:nowrap">${fmtDate(r.c.travelDate)}</td>
+        <td><b>${esc(r.b.fileNo)}</b><div class="hint">${esc((r.b.pax||'').slice(0,26))}</div></td>
+        <td><span class="pill-src ${esc(r.b.source)}">${esc(r.b.source.slice(0,3).toUpperCase())}</span></td>
+        <td style="max-width:250px">${esc((r.c.activity||'').slice(0,60))}</td>
+        <td style="min-width:130px">${esc(r.c.supplier||'—')}</td>
+        <td>${esc((r.c.bookingRef||'').slice(0,16))}</td>
+        <td><select onchange="cqSetStatus('${esc(r.b.id)}',${r.i},this.value)">${STATUSES.map(s=>`<option ${r.c.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td>${sixPointComplete(r.c)?'<span class="var-pos">✓</span>':'<span class="var-chk">—</span>'}</td>
+        <td><button class="btn ghost small" onclick="openBookingAt('${esc(r.b.id)}',${r.i})">Open</button></td>
+      </tr>`).join('') || '<tr><td colspan="10" class="empty">Nothing awaiting confirmation — the queue is clear. 🎉</td></tr>';
+}
+function renderConfirmRows(){
+  const el = document.getElementById('cq-results');
+  if (!el) return;
+  const {rows} = computeConfirmRows();
+  el.innerHTML = confirmRowsHTML(rows);
+  const cnt = document.getElementById('cq-count');
+  if (cnt) cnt.textContent = rows.length + ' shown' + (rows.length>400?' (first 400)':'');
+}
+function renderConfirmations(){
+  const el = document.getElementById('view-confirmations');
+  if (!el) return;
+  const f = cqFilters;
+  const {queue, rows} = computeConfirmRows();
+  const suppliers = [...new Set(queue.map(r=>(r.c.supplier||'').trim()).filter(Boolean))].sort();
+  const months = [...new Set(queue.map(r=>(r.c.travelDate||'').slice(0,7)).filter(Boolean))].sort();
 
   const bySupplier = {};
   queue.forEach(r=>{ const s=(r.c.supplier||'(no supplier)').trim()||'(no supplier)'; bySupplier[s]=(bySupplier[s]||0)+1; });
@@ -3736,30 +3796,19 @@ function renderConfirmations(){
       <span class="hint">Chase by supplier: ${topSup.map(([s,n])=>`<a href="#" onclick="cqFilters.supplier='${esc(s==='(no supplier)'?'':s)}';renderConfirmations();return false">${esc(s.slice(0,22))} (${n})</a>`).join(' · ')}</span>
     </div>
     <div class="toolbar">
-      <input type="search" placeholder="Search file no, pax, activity, ref…" value="${esc(f.q)}" oninput="cqFilters.q=this.value;renderConfirmations()">
+      <input type="search" placeholder="Search file no, pax, activity, ref…" value="${esc(f.q)}" oninput="cqFilters.q=this.value;renderConfirmRows()">
       <select onchange="cqFilters.supplier=this.value;renderConfirmations()"><option value="">All suppliers</option>${suppliers.map(s=>`<option ${f.supplier===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
       <select onchange="cqFilters.service=this.value;renderConfirmations()"><option value="">Any service</option>${SERVICES.map(s=>`<option ${f.service===s?'selected':''}>${s}</option>`).join('')}</select>
       <select onchange="cqFilters.source=this.value;renderConfirmations()"><option value="">All sources</option>${['USA','Australia','Other'].map(s=>`<option ${f.source===s?'selected':''}>${s}</option>`).join('')}</select>
       <select onchange="cqFilters.band=this.value;renderConfirmations()"><option value="">All T-bands</option>${[['btrav','Travelling'],['b15','T-15'],['b30','T-30'],['b45','T-45'],['b60','T-60'],['blater','60+']].map(([k,l])=>`<option value="${k}" ${f.band===k?'selected':''}>${l}</option>`).join('')}</select>
       <select onchange="cqFilters.month=this.value;renderConfirmations()"><option value="">Any month</option>${months.map(m=>`<option value="${m}" ${f.month===m?'selected':''}>${monthLabel(m)}</option>`).join('')}</select>
-      <input placeholder="Destination / activity keyword" style="max-width:190px" value="${esc(f.dest)}" oninput="cqFilters.dest=this.value;renderConfirmations()">
+      <input placeholder="Destination / activity keyword" style="max-width:190px" value="${esc(f.dest)}" oninput="cqFilters.dest=this.value;renderConfirmRows()">
       ${(f.q||f.supplier||f.service||f.source||f.band||f.month||f.dest)?`<button class="btn ghost small" onclick="cqFilters={q:'',supplier:'',service:'',source:'',band:'',month:'',dest:''};renderConfirmations()">Clear</button>`:''}
-      <span class="hint" style="margin-left:auto">${rows.length} shown</span>
+      <span class="hint" id="cq-count" style="margin-left:auto">${rows.length} shown</span>
     </div>
     <div class="tbl-scroll"><table class="bk static">
       <thead><tr><th>Band</th><th>Travel date</th><th>File No</th><th>Src</th><th>Activity</th><th>Supplier / company</th><th>Ref</th><th>Status</th><th>6-pt</th><th></th></tr></thead>
-      <tbody>${rows.slice(0,400).map(r=>`<tr>
-        <td><span class="badge ${r.band.key}">${r.band.label}</span></td>
-        <td style="white-space:nowrap">${fmtDate(r.c.travelDate)}</td>
-        <td><b>${esc(r.b.fileNo)}</b><div class="hint">${esc((r.b.pax||'').slice(0,26))}</div></td>
-        <td><span class="pill-src ${esc(r.b.source)}">${esc(r.b.source.slice(0,3).toUpperCase())}</span></td>
-        <td style="max-width:250px">${esc((r.c.activity||'').slice(0,60))}</td>
-        <td style="min-width:130px">${esc(r.c.supplier||'—')}</td>
-        <td>${esc((r.c.bookingRef||'').slice(0,16))}</td>
-        <td><select onchange="cqSetStatus('${esc(r.b.id)}',${r.i},this.value)">${STATUSES.map(s=>`<option ${r.c.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-        <td>${sixPointComplete(r.c)?'<span class="var-pos">✓</span>':'<span class="var-chk">—</span>'}</td>
-        <td><button class="btn ghost small" onclick="openBookingAt('${esc(r.b.id)}',${r.i})">Open</button></td>
-      </tr>`).join('') || '<tr><td colspan="10" class="empty">Nothing awaiting confirmation — the queue is clear. 🎉</td></tr>'}</tbody>
+      <tbody id="cq-results">${confirmRowsHTML(rows)}</tbody>
     </table></div>
     ${rows.length>400?'<div class="hint">Showing first 400 — narrow the filters for the rest.</div>':''}
     <div class="hint">Tip: filter by a supplier and work down the list while you have them on the phone — set each line to Confirmed here, then use Open to complete the 6-point details.</div>`;
@@ -3854,28 +3903,17 @@ function renderArrivals(){
 
 /* ---- Hotels (Europe) — read-only view of the Contracting list ---- */
 let hotOpsFilters = { q:'', city:'', status:'' };
-function renderHotelsOps(){
-  const el = document.getElementById('view-hotels');
-  if (!el) return;
+function computeHotelOpsRows(){
   const f = hotOpsFilters;
-  const cities = [...new Set(state.hotels.map(h=>h.city).filter(Boolean))].sort();
   let rows = state.hotels.slice();
   if (f.city) rows = rows.filter(h=>h.city===f.city);
   if (f.status) rows = rows.filter(h=>h.status===f.status);
   if (f.q){ const q=f.q.toLowerCase(); rows = rows.filter(h=>[h.hotel,h.city,h.email,h.phone,h.gm,h.dos,h.location].join(' ').toLowerCase().includes(q)); }
   rows.sort((a,z)=>(a.city||'').localeCompare(z.city||'')||(a.hotel||'').localeCompare(z.hotel||''));
-  el.innerHTML = `
-    <h2 class="vtitle">Hotels — Europe programme</h2>
-    <div class="vsub">${rows.length} of ${state.hotels.length} hotels · live from the Contracting workspace — edit rates and status there (Hub → Contracting)</div>
-    <div class="toolbar">
-      <input type="search" placeholder="Search hotel, city, contact…" value="${esc(f.q)}" oninput="hotOpsFilters.q=this.value;renderHotelsOps()">
-      <select onchange="hotOpsFilters.city=this.value;renderHotelsOps()"><option value="">All cities</option>${cities.map(c=>`<option ${f.city===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
-      <select onchange="hotOpsFilters.status=this.value;renderHotelsOps()"><option value="">Any status</option>${['Contracted','In Progress','Not Actioned','Declined'].map(s=>`<option ${f.status===s?'selected':''}>${s}</option>`).join('')}</select>
-      ${(f.q||f.city||f.status)?`<button class="btn ghost small" onclick="hotOpsFilters={q:'',city:'',status:''};renderHotelsOps()">Clear</button>`:''}
-    </div>
-    <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>City</th><th>Hotel</th><th>★</th><th>Phone</th><th>Email</th><th>Contacts</th><th>Status</th></tr></thead>
-      <tbody>${rows.map(h=>`<tr>
+  return rows;
+}
+function hotelOpsRowsHTML(rows){
+  return rows.map(h=>`<tr>
         <td>${esc(h.city)}</td>
         <td style="min-width:180px"><b>${esc(h.hotel)}</b><div class="hint">${esc(h.location||'')}</div></td>
         <td>${esc(h.stars||'')}</td>
@@ -3883,7 +3921,30 @@ function renderHotelsOps(){
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc(h.email||'—')}</td>
         <td style="max-width:180px"><div class="hint" style="margin:0">${esc(h.gm||'')}${h.dos?(h.gm?' · ':'')+esc(h.dos):''}</div></td>
         <td><span class="chip ${esc((h.status||'').replace(' ',''))}">${esc(h.status||'—')}</span></td>
-      </tr>`).join('') || `<tr><td colspan="7" class="empty">${state.hotels.length? 'No hotels match.' : 'Hotel list loads from the live database — open the Hub → Contracting to manage it.'}</td></tr>`}</tbody>
+      </tr>`).join('') || `<tr><td colspan="7" class="empty">${state.hotels.length? 'No hotels match.' : 'Hotel list loads from the live database — open the Hub → Contracting to manage it.'}</td></tr>`;
+}
+function renderHotelOpsRows(){
+  const el = document.getElementById('hot-results');
+  if (el) el.innerHTML = hotelOpsRowsHTML(computeHotelOpsRows());
+}
+function renderHotelsOps(){
+  const el = document.getElementById('view-hotels');
+  if (!el) return;
+  const f = hotOpsFilters;
+  const cities = [...new Set(state.hotels.map(h=>h.city).filter(Boolean))].sort();
+  const rows = computeHotelOpsRows();
+  el.innerHTML = `
+    <h2 class="vtitle">Hotels — Europe programme</h2>
+    <div class="vsub">${rows.length} of ${state.hotels.length} hotels · live from the Contracting workspace — edit rates and status there (Hub → Contracting)</div>
+    <div class="toolbar">
+      <input type="search" placeholder="Search hotel, city, contact…" value="${esc(f.q)}" oninput="hotOpsFilters.q=this.value;renderHotelOpsRows()">
+      <select onchange="hotOpsFilters.city=this.value;renderHotelsOps()"><option value="">All cities</option>${cities.map(c=>`<option ${f.city===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+      <select onchange="hotOpsFilters.status=this.value;renderHotelsOps()"><option value="">Any status</option>${['Contracted','In Progress','Not Actioned','Declined'].map(s=>`<option ${f.status===s?'selected':''}>${s}</option>`).join('')}</select>
+      ${(f.q||f.city||f.status)?`<button class="btn ghost small" onclick="hotOpsFilters={q:'',city:'',status:''};renderHotelsOps()">Clear</button>`:''}
+    </div>
+    <div class="tbl-scroll"><table class="bk static">
+      <thead><tr><th>City</th><th>Hotel</th><th>★</th><th>Phone</th><th>Email</th><th>Contacts</th><th>Status</th></tr></thead>
+      <tbody id="hot-results">${hotelOpsRowsHTML(rows)}</tbody>
     </table></div>`;
 }
 
@@ -4307,32 +4368,18 @@ const ATTR_SEED = [
  {id:'at42', city:'Singapore', country:'Singapore', name:'Universal Studios Singapore', type:'Entrance', lead:'1–2 weeks', booking:'RWS official / trade', tips:'Express passes for tight stopover schedules.'}
 ];
 let attrFilters = { q:'', city:'', type:'' };
-function renderAttractions(){
-  const el = document.getElementById('view-attractions');
-  if (!el) return;
+function computeAttractionRows(){
   const f = attrFilters;
-  const cities = [...new Set(state.attractions.map(a=>a.city))].sort();
   let rows = state.attractions.slice();
   if (f.city) rows = rows.filter(a=>a.city===f.city);
   if (f.type) rows = rows.filter(a=>a.type===f.type);
   if (f.q){ const q=f.q.toLowerCase(); rows = rows.filter(a=>[a.name,a.city,a.country,a.booking,a.tips].join(' ').toLowerCase().includes(q)); }
   rows.sort((a,z)=>(a.country||'').localeCompare(z.country||'')||(a.city||'').localeCompare(z.city||'')||(a.name||'').localeCompare(z.name||''));
+  return rows;
+}
+function attractionRowsHTML(rows){
   const urgent = a => /90|month|instant|release|seasonal/i.test(a.lead||'');
-  el.innerHTML = `
-    <div class="flex-between" style="margin-bottom:6px">
-      <div><h2 class="vtitle">Top attractions — booking intelligence</h2>
-      <div class="vsub">${rows.length} of ${state.attractions.length} · lead times, official channels and operational tips · shared live — keep it current as rules change</div></div>
-      <button class="btn" onclick="addAttraction()">+ Add attraction</button>
-    </div>
-    <div class="toolbar">
-      <input type="search" placeholder="Search attraction, city, tip…" value="${esc(f.q)}" oninput="attrFilters.q=this.value;renderAttractions()">
-      <select onchange="attrFilters.city=this.value;renderAttractions()"><option value="">All cities</option>${cities.map(c=>`<option ${f.city===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
-      <select onchange="attrFilters.type=this.value;renderAttractions()"><option value="">All types</option><option ${f.type==='Entrance'?'selected':''}>Entrance</option><option ${f.type==='Experience'?'selected':''}>Experience</option></select>
-      ${(f.q||f.city||f.type)?`<button class="btn ghost small" onclick="attrFilters={q:'',city:'',type:''};renderAttractions()">Clear</button>`:''}
-    </div>
-    <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>City</th><th>Attraction</th><th>Type</th><th>Book ahead</th><th>Booking channel</th><th>Operational tips</th><th></th></tr></thead>
-      <tbody>${rows.map(a=>`<tr>
+  return rows.map(a=>`<tr>
         <td style="white-space:nowrap"><b>${esc(a.city)}</b><div class="hint" style="margin:0">${esc(a.country||'')}</div></td>
         <td style="min-width:170px"><b>${esc(a.name)}</b></td>
         <td><span class="badge">${esc(a.type||'')}</span></td>
@@ -4340,7 +4387,33 @@ function renderAttractions(){
         <td style="max-width:230px">${esc(a.booking||'')}</td>
         <td style="max-width:320px" class="hint" style="margin:0">${esc(a.tips||'')}</td>
         <td style="white-space:nowrap"><button class="btn ghost small" onclick="editAttraction('${a.id}')">Edit</button> <button class="btn danger small" onclick="if(confirm('Remove ${esc(a.name)}?'))deleteListItem('attractions','${a.id}')">✕</button></td>
-      </tr>`).join('') || '<tr><td colspan="7" class="empty">Nothing matches.</td></tr>'}</tbody>
+      </tr>`).join('') || '<tr><td colspan="7" class="empty">Nothing matches.</td></tr>';
+}
+function renderAttractionRows(){
+  const el = document.getElementById('attr-results');
+  if (el) el.innerHTML = attractionRowsHTML(computeAttractionRows());
+}
+function renderAttractions(){
+  const el = document.getElementById('view-attractions');
+  if (!el) return;
+  const f = attrFilters;
+  const cities = [...new Set(state.attractions.map(a=>a.city))].sort();
+  const rows = computeAttractionRows();
+  el.innerHTML = `
+    <div class="flex-between" style="margin-bottom:6px">
+      <div><h2 class="vtitle">Top attractions — booking intelligence</h2>
+      <div class="vsub">${rows.length} of ${state.attractions.length} · lead times, official channels and operational tips · shared live — keep it current as rules change</div></div>
+      <button class="btn" onclick="addAttraction()">+ Add attraction</button>
+    </div>
+    <div class="toolbar">
+      <input type="search" placeholder="Search attraction, city, tip…" value="${esc(f.q)}" oninput="attrFilters.q=this.value;renderAttractionRows()">
+      <select onchange="attrFilters.city=this.value;renderAttractions()"><option value="">All cities</option>${cities.map(c=>`<option ${f.city===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+      <select onchange="attrFilters.type=this.value;renderAttractions()"><option value="">All types</option><option ${f.type==='Entrance'?'selected':''}>Entrance</option><option ${f.type==='Experience'?'selected':''}>Experience</option></select>
+      ${(f.q||f.city||f.type)?`<button class="btn ghost small" onclick="attrFilters={q:'',city:'',type:''};renderAttractions()">Clear</button>`:''}
+    </div>
+    <div class="tbl-scroll"><table class="bk static">
+      <thead><tr><th>City</th><th>Attraction</th><th>Type</th><th>Book ahead</th><th>Booking channel</th><th>Operational tips</th><th></th></tr></thead>
+      <tbody id="attr-results">${attractionRowsHTML(rows)}</tbody>
     </table></div>
     <div class="hint" style="margin-top:10px">⚠ red lead times = book-on-release attractions (Last Supper, Alhambra, Anne Frank, Harry Potter) — diarise the release dates, do not wait for the T-band.</div>`;
 }
