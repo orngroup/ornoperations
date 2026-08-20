@@ -362,6 +362,7 @@ html.sso body::before{content:'Signing you in\2026';position:fixed;inset:0;displ
       <div class="view" id="view-takeover"></div>
       <div class="view" id="view-cards"></div>
       <div class="view" id="view-quotes"></div>
+      <div class="view" id="view-sales"></div>
       <div class="view" id="view-refunds"></div>
       <div class="view" id="view-directory"></div>
       <div class="view" id="view-rail"></div>
@@ -767,7 +768,7 @@ function deleteListItem(kind, id){
 function renderListView(kind){
   if (kind==='guestchats'){ renderGuestChats(); renderSidebar(); }
   if (kind==='tickets'){ watchNewTickets(); renderMessages(); renderSidebar(); renderDashboard(); }
-  if (kind==='quotes'){ renderQuotes(); renderSidebar(); renderDashboard(); }
+  if (kind==='quotes'){ renderQuotes(); renderSidebar(); renderDashboard(); if(currentView==='sales') renderSales(); }
   if (kind==='directory') renderDirectory();
   if (kind==='cards') renderCards();
   if (kind==='refunds') renderRefunds();
@@ -846,12 +847,42 @@ function tband(b){
 /* Four request categories per Lisa's routing email — each maps to a dedicated
    inbox address (default per her email, editable in Settings). */
 const REQUEST_CATEGORIES = {
-  quote:      {label:'Quote / product loading',   short:'Quote & loading',   color:'var(--gold)',    defaultEmail:'quoteseu@orn.com'},
-  support:    {label:'Booking admin / operational',short:'Booking admin',    color:'var(--muted)',   defaultEmail:'supporteu@orn.com'},
-  customer:   {label:'Customer contact / support', short:'Customer',         color:'#5b8def',         defaultEmail:'customereu@orn.com'},
-  escalation: {label:'Escalation',                 short:'Escalation',       color:'var(--danger)',  defaultEmail:'escalationseu@orn.com'},
-  management: {label:'Management escalation',      short:'Mgmt escalation',  color:'#8b1a3f',         defaultEmail:'escalationseu@orn.com'}
+  quote:      {label:'Quote / product loading',   short:'Quote & loading',   color:'var(--gold)',    defaultEmail:'quoteseu@orn.com',      slaHours:72},
+  support:    {label:'Booking admin / operational',short:'Booking admin',    color:'var(--muted)',   defaultEmail:'supporteu@orn.com',     slaHours:24},
+  customer:   {label:'Customer contact / support', short:'Customer',         color:'#5b8def',         defaultEmail:'customereu@orn.com',    slaHours:24},
+  escalation: {label:'Escalation',                 short:'Escalation',       color:'var(--danger)',  defaultEmail:'escalationseu@orn.com', slaHours:4},
+  management: {label:'Management escalation',      short:'Mgmt escalation',  color:'#8b1a3f',         defaultEmail:'escalationseu@orn.com', slaHours:8}
 };
+/* Timer / SLA: quote reply & booking confirmation = 72h from receipt, booking
+   queries = 24h, per Ajay's spec. Defaults are editable per-category in
+   Settings; each request can also have its own override (slaOverrideHours). */
+function categorySlaHours(cat){
+  const cfg = (state.notify && state.notify.categorySla) || {};
+  const v = cfg[cat];
+  return (v!=null && v!=='') ? Number(v) : ((REQUEST_CATEGORIES[cat]||{}).slaHours ?? 24);
+}
+function requestSlaHours(q){
+  return (q.slaOverrideHours!=null && q.slaOverrideHours!=='') ? Number(q.slaOverrideHours) : categorySlaHours(q.category||'quote');
+}
+function requestDeadlineMs(q){
+  const start = q.ts ? new Date(q.ts).getTime() : Date.now();
+  return start + requestSlaHours(q)*3600000;
+}
+function requestTimeBand(q){
+  if (q.status==='Won' || q.status==='Lost') return {key:'rdone', label:'Closed', order:9, color:'var(--faint)', hoursLeft:null};
+  const msLeft = requestDeadlineMs(q) - Date.now();
+  const hrsLeft = msLeft/3600000;
+  if (hrsLeft < 0) return {key:'rover', label:'Overdue '+fmtHoursAgo(-hrsLeft), order:0, color:'var(--danger)', hoursLeft:hrsLeft};
+  if (hrsLeft <= 4) return {key:'rcrit', label:fmtHoursLeft(hrsLeft)+' left', order:1, color:'var(--danger)', hoursLeft:hrsLeft};
+  if (hrsLeft <= 24) return {key:'rsoon', label:fmtHoursLeft(hrsLeft)+' left', order:2, color:'var(--warn)', hoursLeft:hrsLeft};
+  return {key:'rok', label:fmtHoursLeft(hrsLeft)+' left', order:3, color:'var(--gold)', hoursLeft:hrsLeft};
+}
+function fmtHoursLeft(h){
+  if (h < 1) return Math.round(h*60)+'m';
+  if (h < 48) return Math.round(h)+'h';
+  return Math.round(h/24)+'d';
+}
+function fmtHoursAgo(h){ return fmtHoursLeft(h); }
 function categoryEmail(cat){
   const cfg = (state.notify && state.notify.categoryEmails) || {};
   return cfg[cat] || (REQUEST_CATEGORIES[cat]||{}).defaultEmail || '';
@@ -1041,6 +1072,7 @@ function renderSidebar(){
     <button class="nv ${currentView==='guestchats'?'active':''}" onclick="switchView('guestchats')"><span>Guest chats</span><span class="cnt" ${state.guestchats.filter(gcUnread).length?'style="background:var(--danger);color:#fff"':''}>${state.guestchats.filter(c=>c.status!=='Closed').length}</span></button>
     <button class="nv ${currentView==='messages'?'active':''}" onclick="switchView('messages')"><span>Messages</span><span class="cnt" ${state.tickets.filter(t=>t.status==='Open').length?'style="background:var(--danger);color:#fff"':''}>${state.tickets.filter(t=>t.status!=='Resolved').length}</span></button>
     <button class="nv ${currentView==='quotes'?'active':''}" onclick="switchView('quotes')"><span>Requests</span><span class="cnt" ${state.quotes.filter(q=>q.status==='New').length?'style="background:var(--danger);color:#fff"':''}>${state.quotes.filter(q=>q.status!=='Won'&&q.status!=='Lost').length}</span></button>
+    <button class="nv ${currentView==='sales'?'active':''}" onclick="switchView('sales')"><span>Sales</span></button>
     <button class="nv ${currentView==='newbookings'?'active':''}" onclick="switchView('newbookings')"><span>New bookings</span><span class="cnt" ${newAusBookings().length?'style="background:var(--danger);color:#fff"':''}>${newAusBookings().length}</span></button>
     <button class="nv ${currentView==='sixpoint'?'active':''}" onclick="switchView('sixpoint')"><span>6-point confirmed</span><span class="cnt">${sixPointReadyBookings().length}</span></button>
     <button class="nv ${currentView==='cards'?'active':''}" onclick="switchView('cards')"><span>Credit card payments</span><span class="cnt">${state.cards.length}</span></button>
@@ -1075,6 +1107,7 @@ function switchView(v){
   if (v==='confirmations') renderConfirmations();
   if (v==='messages') renderMessages();
   if (v==='quotes') renderQuotes();
+  if (v==='sales') renderSales();
   if (v==='guestchats') renderGuestChats();
   if (v==='attractions') renderAttractions();
   if (v==='fleet') renderFleet();
@@ -1209,6 +1242,25 @@ function renderDashboard(){
       ${bandCard('b60','T-60', bands.b60)}
       ${bandCard('blater','60+ days', bands.blater)}
     </div>
+
+    ${(()=>{
+      const open = state.quotes.filter(q=>q.status!=='Won' && q.status!=='Lost')
+        .map(q=>({...q, __t: requestTimeBand(q)}))
+        .sort((a,z)=> a.__t.order - z.__t.order || (a.__t.hoursLeft??999999) - (z.__t.hoursLeft??999999));
+      if (!open.length) return '';
+      return `<div class="card" style="margin-bottom:14px">
+        <h3>Requests by time remaining · click to open</h3>
+        <div class="stat-list">
+        ${open.slice(0,10).map(q=>{
+          const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
+          return `<div class="row" style="cursor:pointer" onclick="switchView('quotes')">
+            <span><span class="badge" style="background:${cat.color};color:#fff;margin-right:6px">${esc(cat.short)}</span>${esc(q.name)} — ${esc((q.destination||q.subject||'').slice(0,40))}</span>
+            <b style="color:${q.__t.color}">${esc(q.__t.label)}</b></div>`;
+        }).join('')}
+        </div>
+        ${open.length>10?`<div class="hint" style="margin-top:6px">+ ${open.length-10} more — open Requests to see all.</div>`:''}
+      </div>`;
+    })()}
 
     <div class="grid3" style="margin-bottom:14px">
       <div class="card">
@@ -1647,6 +1699,14 @@ function renderComp(b,c,i){
         <div><label>Voucher</label><select onchange="editComp(${i},'voucher',this.value)">${['No voucher required','Voucher Required'].map(v=>`<option ${c.voucher===v?'selected':''}>${v}</option>`).join('')}</select></div>
       </div>
       <div class="field-grid">
+        <div><label>UK net rate (cost, ex-markup)</label><span style="display:flex;gap:4px">
+          <input value="${esc(c.ukNetRate||'')}" placeholder="e.g. 100 EUR" style="flex:1" onchange="editUkMarkup(${i},'ukNetRate',this.value)">
+          <select style="width:64px" onchange="setCompCurrency(${i},'ukNetRate',this.value);editUkMarkup(${i},'',null)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
+        </span></div>
+        <div><label>UK markup %</label><input type="number" step="0.5" min="0" value="${c.ukMarkupPct!=null?esc(c.ukMarkupPct):''}" placeholder="e.g. 20" onchange="editUkMarkup(${i},'ukMarkupPct',this.value)"></div>
+        <div><label>Output price (auto → Quoted)</label><div style="padding-top:8px;font-weight:700">${c.ukNetRate&&c.ukMarkupPct!=null&&c.ukMarkupPct!==''?esc(c.quoted||'—'):'<span class="hint">enter net rate + markup</span>'}</div></div>
+      </div>
+      <div class="field-grid">
         <div><label>Quoted (system rate)</label><span style="display:flex;gap:4px">
           <input value="${esc(c.quoted)}" placeholder="e.g. 726.67 EUR" style="flex:1" onchange="editComp(${i},'quoted',this.value)">
           <select style="width:64px" onchange="setCompCurrency(${i},'quoted',this.value)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
@@ -1660,6 +1720,10 @@ function renderComp(b,c,i){
           <select style="width:64px" onchange="setCompCurrency(${i},'paid',this.value)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
         </span></div>
         <div><label>Variance (auto, in EUR — Nexus base currency)</label><div style="padding-top:8px">${varianceHTML(c)}</div></div>
+        <div><label>ORNMU (our EU margin)</label><span style="display:flex;gap:4px">
+          <input value="${esc(c.ornmu)}" placeholder="e.g. 45 EUR" style="flex:1" onchange="editComp(${i},'ornmu',this.value)">
+          <select style="width:64px" onchange="setCompCurrency(${i},'ornmu',this.value)"><option value="">Ccy</option>${['EUR','USD','GBP','CHF','AUD','INR'].map(cc=>`<option value="${cc}">${cc}</option>`).join('')}</select>
+        </span></div>
       </div>
       <div class="field-grid">
         <div><label>Remarks — Ken</label><textarea onchange="editComp(${i},'remarksKen',this.value)">${esc(c.remarksKen)}</textarea></div>
@@ -1731,6 +1795,21 @@ function setCompCurrency(i, field, cur){
   saveBooking(b, `${(c.activity||'component '+(i+1)).slice(0,36)}: ${field} currency → ${cur}`);
   refreshBookingModal();
 }
+/* UK net-rate + markup% → auto-calculates the Quoted (sell) price. field='' with
+   val=null just recomputes after a currency-picker change without editing a field. */
+function editUkMarkup(i, field, val){
+  const b = getBooking(openBookingId);
+  const c = b.components[i];
+  if (field) c[field] = field==='ukMarkupPct' ? (val===''?'':val) : val;
+  const net = parseMoney(c.ukNetRate);
+  const pct = parseFloat(c.ukMarkupPct);
+  if (net && !isNaN(pct)){
+    const output = net.val * (1 + pct/100);
+    c.quoted = output.toFixed(2) + ' ' + net.cur;
+  }
+  saveBooking(b, `${(c.activity||'component '+(i+1)).slice(0,36)}: UK net rate/markup updated${net&&!isNaN(pct)?' → quoted '+c.quoted:''}`);
+  refreshBookingModal();
+}
 function editSix(i, field, val){
   const b = getBooking(openBookingId);
   const c = b.components[i];
@@ -1752,7 +1831,8 @@ function addComponent(){
   const b = getBooking(openBookingId);
   b.components.push({travelDate:b.tripStart||todayISO(), activity:'', voucher:'No voucher required', service:'TOUR',
     supplier:'', bookingRef:'', pickupTime:'', status:'Pending', remarksKen:'', remarksClinton:'',
-    quoted:'', estimated:'', paid:'', sixPoint:{operator:'',phone:'',confirmation:'',time:'',location:'',notes:''}});
+    quoted:'', estimated:'', paid:'', ukNetRate:'', ukMarkupPct:'',
+    sixPoint:{operator:'',phone:'',confirmation:'',time:'',location:'',notes:''}});
   openCompSet.add(b.components.length-1);
   saveBooking(b, 'Added a new component');
   refreshBookingModal();
@@ -2619,32 +2699,74 @@ let quoteCatFilter = '';
 function renderQuotes(){
   const el = document.getElementById('view-quotes');
   if (!el) return;
-  let rows = state.quotes.slice().map(q=>({...q, __band: qband(q)}));
+  let rows = state.quotes.slice().map(q=>({...q, __band: qband(q), __time: requestTimeBand(q)}));
   if (quoteCatFilter) rows = rows.filter(q=>(q.category||'quote')===quoteCatFilter);
-  rows.sort((a,z)=> a.__band.order - z.__band.order || (a.departureDate||'').localeCompare(z.departureDate||''));
+  rows.sort((a,z)=> a.__time.order - z.__time.order || (a.__time.hoursLeft??999) - (z.__time.hoursLeft??999));
   const receiptFor = id => Object.values(state.attachments).find(a=>a.bookingId==='QUOTE-'+id);
   const countFor = cat => state.quotes.filter(q=>(q.category||'quote')===cat && q.status!=='Won' && q.status!=='Lost').length;
+
+  // Pipeline stats — quote/loading requests only, since that's the only category
+  // that carries a monetary value (via the itinerary).
+  const quoteReqs = state.quotes.filter(q=>(q.category||'quote')==='quote');
+  const openQuoteReqs = quoteReqs.filter(q=>q.status!=='Won' && q.status!=='Lost');
+  const wonReqs = quoteReqs.filter(q=>q.status==='Won');
+  const lostReqs = quoteReqs.filter(q=>q.status==='Lost');
+  const pipelineValue = openQuoteReqs.reduce((sum,q)=>sum + (q.components||[]).reduce((s,c)=>{
+    const p = parseMoney(c.price); return s + (p? (toEUR(p)||0) : 0);
+  },0), 0);
+  const wonValue = wonReqs.reduce((sum,q)=>sum + (q.components||[]).reduce((s,c)=>{
+    const p = parseMoney(c.price); return s + (p? (toEUR(p)||0) : 0);
+  },0), 0);
+  const winRate = (wonReqs.length+lostReqs.length) ? Math.round(100*wonReqs.length/(wonReqs.length+lostReqs.length)) : null;
+  const overdueCount = state.quotes.filter(q=>q.status!=='Won'&&q.status!=='Lost'&&requestTimeBand(q).key==='rover').length;
+  const statusCounts = {}; QUOTE_STATUSES.forEach(s=>statusCounts[s]=state.quotes.filter(q=>q.status===s).length);
 
   el.innerHTML = `
     <div class="flex-between" style="margin-bottom:6px">
       <div><h2 class="vtitle">Requests</h2>
-      <div class="vsub">${rows.length} shown · one form, routed by request type — matches quoteseu / supporteu / customereu / escalationseu</div></div>
+      <div class="vsub">${rows.length} shown · sorted by time left on the SLA timer · one form, routed by request type</div></div>
       <span style="display:flex;gap:8px">
       <button class="btn ghost" onclick="copyQuoteFormLink()">Copy request form link</button>
       </span>
+    </div>
+    <div class="grid3" style="margin-bottom:14px">
+      <div class="card">
+        <h3>Quote pipeline (EUR)</h3>
+        <div class="stat-list">
+          <div class="row"><span>Open pipeline value</span><b>${fmtEUR(pipelineValue)}</b></div>
+          <div class="row"><span>Won this record</span><b class="var-neg">${fmtEUR(wonValue)}</b></div>
+          <div class="row"><span>Win rate</span><b>${winRate==null?'—':winRate+'%'}</b></div>
+          <div class="row"><span>Open quote requests</span><b>${openQuoteReqs.length}</b></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>By status</h3>
+        <div class="stat-list">
+        ${QUOTE_STATUSES.map(s=>`<div class="row"><span>${s}</span><b>${statusCounts[s]||0}</b></div>`).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <h3>Health</h3>
+        <div class="stat-list">
+          <div class="row"><span>Total requests logged</span><b>${state.quotes.length}</b></div>
+          <div class="row"><span style="color:${overdueCount?'var(--danger)':'inherit'}">Overdue on SLA</span><b style="color:${overdueCount?'var(--danger)':'inherit'}">${overdueCount}</b></div>
+          <div class="row"><span>Escalations open</span><b>${state.quotes.filter(q=>(q.category==='escalation'||q.category==='management')&&q.status!=='Won'&&q.status!=='Lost').length}</b></div>
+        </div>
+      </div>
     </div>
     <div class="toolbar" style="margin-bottom:10px">
       <button class="btn ${!quoteCatFilter?'':'ghost'} small" onclick="quoteCatFilter='';renderQuotes()">All (${state.quotes.filter(q=>q.status!=='Won'&&q.status!=='Lost').length})</button>
       ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<button class="btn ${quoteCatFilter===k?'':'ghost'} small" style="${quoteCatFilter===k?'background:'+c.color+';border-color:'+c.color:''}" onclick="quoteCatFilter='${k}';renderQuotes()">${c.short} (${countFor(k)})</button>`).join('')}
     </div>
-    <div class="hint" style="margin-bottom:10px">Share the request form link with clients/agents/Sales Support instead of email — they pick the request type, it lands here sorted by urgency, and alerts the right inbox (${Object.values(REQUEST_CATEGORIES).map(c=>c.defaultEmail).join(' · ')}).</div>
+    <div class="hint" style="margin-bottom:10px">Share the request form link with clients/agents/Sales Support instead of email — they pick the request type, it lands here sorted by urgency, and alerts the right inbox (${Object.values(REQUEST_CATEGORIES).map(c=>c.defaultEmail).join(' · ')}). Timer defaults: Quote & loading 72h, Booking admin/Customer 24h, Escalation 4h, Mgmt escalation 8h — edit defaults in Settings, or override per request below.</div>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Type</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
+      <thead><tr><th>Type</th><th>Time left</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Itinerary</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
       <tbody>${rows.map(q=>{
         const rc = receiptFor(q.id);
         const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
         return `<tr>
         <td><span class="badge" style="background:${cat.color};color:#fff">${esc(cat.short)}</span></td>
+        <td><span class="badge" style="background:${q.__time.color};color:#fff">${esc(q.__time.label)}</span><div class="hint" style="margin-top:3px"><input type="number" min="1" value="${q.slaOverrideHours!=null?esc(q.slaOverrideHours):''}" placeholder="${categorySlaHours(q.category||'quote')}h default" onchange="editQuote('${q.id}','slaOverrideHours',this.value?Number(this.value):null)" style="width:80px;font-size:11px;padding:3px 6px"></div></td>
         <td>${q.category==='quote'?`<span class="badge" style="background:${QBAND_COLOR[q.__band.key]};color:#fff">${esc(q.__band.label)}</span>`:'<span class="hint">—</span>'}</td>
         <td>${q.category==='quote'?fmtDate(q.departureDate):'—'}</td>
         <td><b>${esc(q.name)}</b><div class="hint">${esc(q.email)}${q.phone?' · '+esc(q.phone):''}${q.agency?' · '+esc(q.agency):''}${q.replyEmail && q.replyEmail!==q.email?'<br>Reply to: '+esc(q.replyEmail):''}</div></td>
@@ -2654,14 +2776,18 @@ function renderQuotes(){
         <td><input value="${esc(q.tagRef||q.bookingRef||'')}" placeholder="TAG..." onchange="editQuote('${q.id}','tagRef',this.value)" style="min-width:100px"></td>
         <td><input value="${esc(q.specialNotes||'')}" placeholder="Special notes" onchange="editQuote('${q.id}','specialNotes',this.value)" style="min-width:140px"></td>
         <td><select onchange="editQuote('${q.id}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td><button class="btn ghost small" onclick="openQuoteItinerary('${q.id}')">Itinerary (${(q.components||[]).length})</button>
+          ${q.bookingId? `<button class="btn ghost small" onclick="openBooking('${esc(q.bookingId)}')">Open ${esc(q.bookingId)}</button>` : `<button class="btn ghost small" onclick="convertQuoteToBooking('${q.id}')">→ Booking</button>`}</td>
         <td>${rc
           ? `<button class="btn ghost small" onclick="downloadAtt('${rc.id}')">📎 View</button> <button class="btn danger small" onclick="deleteAtt('${rc.id}');renderQuotes()">✕</button>`
           : `<button class="btn ghost small" onclick="uploadQuoteDoc('${q.id}')">Upload</button>`}
           <button class="btn ghost small" onclick="printQuotePdf('${q.id}')">PDF</button></td>
         <td><input value="${esc(q.internalNotes||'')}" placeholder="Internal notes" onchange="editQuote('${q.id}','internalNotes',this.value)" style="min-width:130px"></td>
         <td><button class="btn danger small" onclick="delQuote('${q.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="13" class="empty">No requests in this category yet.</td></tr>'}</tbody>
-    </table></div>`;
+      </tr>`;}).join('') || '<tr><td colspan="15" class="empty">No requests in this category yet.</td></tr>'}</tbody>
+    </table></div>
+    <div id="quoteItinerary"></div>`;
+  renderQuoteItinerary();
 }
 function editQuote(id, f, v){
   const q = state.quotes.find(x=>x.id===id); if (!q) return;
@@ -2674,6 +2800,40 @@ function delQuote(id){
   if (rc) deleteAttSilent(rc.id);
   deleteListItem('quotes', id);
   logActivity('-', 'Quote request deleted');
+}
+/* Converts a won quote's itinerary into a real booking. One route: the quote's
+   components (built with the same fields as a live booking's) carry straight
+   across, so nothing needs re-typing. Quote price becomes the booking's Quoted
+   rate for each component, ready for the normal reconfirmation workflow. */
+function convertQuoteToBooking(quoteId){
+  const q = state.quotes.find(x=>x.id===quoteId); if (!q) return;
+  if (q.bookingId){ if (confirm('This quote is already linked to booking '+q.bookingId+'. Open it?')) openBooking(q.bookingId); return; }
+  if (!(q.components||[]).length){ alert('Add at least one itinerary component before converting to a booking (use the Itinerary button).'); return; }
+  let fileNo = (q.ornRef || q.tagRef || q.bookingRef || '').trim().toUpperCase();
+  if (!fileNo) fileNo = (prompt('File No for the new booking (e.g. TAG0146DE3J or ORN0146DE3J):','') || '').trim().toUpperCase();
+  if (!fileNo){ alert('A File No is required to create the booking.'); return; }
+  if (state.bookings.some(b=>b.id===fileNo)){ alert('A booking with File No '+fileNo+' already exists.'); return; }
+  const source = fileNo.startsWith('ORN') ? 'Australia' : fileNo.startsWith('TAG') ? 'USA' : 'Other';
+  const paxLine = [q.pax, q.childAges?('children: '+q.childAges):''].filter(Boolean).join(' · ');
+  const b = seedToBooking({
+    fileNo, source, contact: q.replyEmail||q.email||q.phone||'',
+    pax: paxLine, attachedTrips:'None',
+    tripStart: q.departureDate||'', tripEnd: q.departureDate||'',
+    components: q.components.map(c=>({
+      travelDate:c.travelDate, activity:c.activity, voucher:c.voucher, service:c.service,
+      supplier:c.supplier, bookingRef:c.bookingRef, status:'Pending',
+      quoted: c.price || '', ukNetRate: c.cost || '', ukMarkupPct: ''
+    })),
+    sheet:'manual'
+  });
+  b.addedAt = new Date().toISOString();
+  b.fromQuoteId = q.id;
+  if (source==='Australia'){ b.newFromAus = true; b.loadedBy = state.user?state.user.id:'?'; b.loadedAt = new Date().toISOString(); }
+  saveBooking(b, 'Booking created from won quote '+(q.ref||q.id));
+  q.status = 'Won'; q.bookingId = fileNo;
+  saveListItem('quotes', q);
+  logActivity(q.name||'-', 'Quote converted to booking '+fileNo);
+  openBooking(fileNo);
 }
 function uploadQuoteDoc(quoteId){
   const inp = document.createElement('input');
@@ -2698,12 +2858,91 @@ function copyQuoteFormLink(){
   const url = location.origin + location.pathname.replace(/\/ops\/.*/, '/quote-request/');
   navigator.clipboard.writeText(url).then(()=>toast('Request form link copied')).catch(()=>alert(url));
 }
+/* ================= SALES — pipeline, quotes given/won, margin by agency ================= */
+function quoteTotals(q){
+  let cost=0, margin=0, price=0;
+  (q.components||[]).forEach(c=>{
+    const cm=parseMoney(c.cost); if(cm) cost+=toEUR(cm)||0;
+    const mm=parseMoney(c.margin); if(mm) margin+=toEUR(mm)||0;
+    const pm=parseMoney(c.price); if(pm) price+=toEUR(pm)||0;
+  });
+  return {cost, margin, price};
+}
+function renderSales(){
+  const el = document.getElementById('view-sales');
+  if (!el) return;
+  const quotesOnly = state.quotes.filter(q=>(q.category||'quote')==='quote');
+  const received = quotesOnly.length;
+  const given = quotesOnly.filter(q=>['Quoted','Sent','Won','Lost'].includes(q.status)).length;
+  const won = quotesOnly.filter(q=>q.status==='Won');
+  const lost = quotesOnly.filter(q=>q.status==='Lost');
+  const closed = won.length + lost.length;
+  const winRate = closed? Math.round(won.length/closed*100) : null;
+  const open = quotesOnly.filter(q=>!['Won','Lost'].includes(q.status));
+
+  let pipelineValue=0, pipelineMargin=0, wonValue=0, wonMargin=0;
+  const byAgency = {};
+  quotesOnly.forEach(q=>{
+    const t = quoteTotals(q);
+    const agencyKey = q.agency || 'Direct / no agency';
+    const a = byAgency[agencyKey] = byAgency[agencyKey] || {received:0, given:0, won:0, lost:0, value:0, margin:0};
+    a.received++;
+    if (['Quoted','Sent','Won','Lost'].includes(q.status)) a.given++;
+    if (q.status==='Won'){ a.won++; a.value+=t.price; a.margin+=t.margin; wonValue+=t.price; wonMargin+=t.margin; }
+    else if (q.status==='Lost'){ a.lost++; }
+    else { pipelineValue+=t.price; pipelineMargin+=t.margin; }
+  });
+  const agencyRows = Object.entries(byAgency).sort((a,z)=>z[1].value-a[1].value);
+
+  const euro = v => '€'+Math.round(v).toLocaleString('en-GB');
+
+  el.innerHTML = `
+    <div class="flex-between" style="margin-bottom:6px">
+      <div><h2 class="vtitle">Sales</h2>
+      <div class="vsub">Quote pipeline, win rate and margin — built from the Requests / Quote &amp; loading queue</div></div>
+    </div>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card"><h3>Quotes received / given</h3>
+        <div class="bignum">${received}</div>
+        <div class="subnum">${given} quotes given · ${open.length} still open</div></div>
+      <div class="card"><h3>Win rate</h3>
+        <div class="bignum ${winRate!=null && winRate>=50?'saving':''}">${winRate!=null? winRate+'%' : '—'}</div>
+        <div class="subnum">${won.length} won · ${lost.length} lost · ${closed} closed total</div></div>
+      <div class="card"><h3>Pipeline value (open quotes)</h3>
+        <div class="bignum">${euro(pipelineValue)}</div>
+        <div class="subnum">${euro(pipelineMargin)} margin in pipeline</div></div>
+    </div>
+    <div class="grid3" style="margin-bottom:16px">
+      <div class="card"><h3>Won — value &amp; margin</h3>
+        <div class="bignum saving">${euro(wonValue)}</div>
+        <div class="subnum">${euro(wonMargin)} margin booked · ${won.length} deals</div></div>
+    </div>
+    <div class="card">
+      <h3>Pipeline by agent / company</h3>
+      <div class="tbl-scroll"><table class="bk static">
+        <thead><tr><th>Agency / client</th><th>Received</th><th>Given</th><th>Won</th><th>Lost</th><th>Won value</th><th>Won margin</th></tr></thead>
+        <tbody>${agencyRows.map(([name,a])=>`<tr>
+          <td>${esc(name)}</td><td>${a.received}</td><td>${a.given}</td>
+          <td class="var-pos">${a.won}</td><td class="var-neg">${a.lost}</td>
+          <td>${euro(a.value)}</td><td>${euro(a.margin)}</td>
+        </tr>`).join('') || '<tr><td colspan="7" class="empty">No quote requests yet.</td></tr>'}</tbody>
+      </table></div>
+      <div class="hint" style="margin-top:8px">Value and margin are pulled from each quote's itinerary line items (cost / margin / quote price) — fill those in on a request's Itinerary to see them reflected here.</div>
+    </div>`;
+}
 /* Print-to-PDF quote the team can fill in and send back, mirroring the existing
    voucher/report print pattern (Ctrl/Cmd+P → Save as PDF). */
 function printQuotePdf(id){
   const q = state.quotes.find(x=>x.id===id); if (!q) return;
   const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
   const isQuote = (q.category||'quote')==='quote';
+  const comps = q.components || [];
+  let totalCost=0, totalMargin=0, totalPrice=0;
+  comps.forEach(c=>{
+    const cm = parseMoney(c.cost); if (cm) totalCost += toEUR(cm);
+    const mm = parseMoney(c.margin); if (mm) totalMargin += toEUR(mm);
+    const pm = parseMoney(c.price); if (pm) totalPrice += toEUR(pm);
+  });
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html><html lang="en-GB"><head><meta charset="UTF-8"><title>ORN ${esc(cat.short)} — ${esc(q.name)}</title>
   <style>
@@ -2714,19 +2953,24 @@ function printQuotePdf(id){
     .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:#5f6880}
     .v{font-size:13.5px;margin-top:2px}
     .fill{border:1px dashed #c9a94f;border-radius:6px;min-height:60px;padding:10px;margin-top:6px;color:#9aa2b5;font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    th{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#5f6880;text-align:left;padding:5px 6px;border-bottom:2px solid #d5dae3}
+    td{padding:5px 6px;border-bottom:1px solid #eceff4;font-size:11px}
+    tfoot td{font-weight:700;border-top:2px solid #d5dae3;border-bottom:none}
     .foot{color:#9aa2b5;font-size:10.5px;margin-top:26px}
     @media print{ body{margin:12mm} .noprint{display:none} }
   </style></head><body>
   <div class="noprint" style="background:#fdf6e3;border:1px solid #a9801e;border-radius:8px;padding:10px 14px;margin-bottom:16px">
-    ${isQuote? 'Fill in the pricing/inclusions box below before printing. ' : ''}Press <b>Ctrl/Cmd + P</b> and choose <b>Save as PDF</b> to send to the client. <button onclick="window.print()">Print / Save PDF</button></div>
+    ${isQuote && !comps.length? 'Fill in the pricing/inclusions box below before printing. ' : ''}Press <b>Ctrl/Cmd + P</b> and choose <b>Save as PDF</b> to send to the client. <button onclick="window.print()">Print / Save PDF</button></div>
   <h1>ORN Europe — ${esc(cat.label)}</h1>
   <div class="sub">Prepared by ${esc(state.user?state.user.name:'')} · ${new Date().toLocaleDateString('en-GB')} · routed via ${esc(categoryEmail(q.category||'quote'))}</div>
   <h2>Client details</h2>
   <div class="row"><div class="box"><div class="l">Name</div><div class="v">${esc(q.name)}</div></div>
-  <div class="box"><div class="l">Email</div><div class="v">${esc(q.email)}</div></div>
+  <div class="box"><div class="l">Email</div><div class="v">${esc(q.replyEmail||q.email)}</div></div>
   <div class="box"><div class="l">Phone</div><div class="v">${esc(q.phone||'—')}</div></div></div>
   <div class="row"><div class="box"><div class="l">Agency / client</div><div class="v">${esc(q.agency||'—')}</div></div>
-  <div class="box"><div class="l">Booking / quote ref</div><div class="v">${esc(q.bookingRef||'—')}</div></div>
+  <div class="box"><div class="l">ORN ref</div><div class="v">${esc(q.ornRef||'—')}</div></div>
+  <div class="box"><div class="l">TAG ref</div><div class="v">${esc(q.tagRef||q.bookingRef||'—')}</div></div>
   ${isQuote? `<div class="box"><div class="l">Departure date</div><div class="v">${fmtDate(q.departureDate)}</div></div>`:''}</div>
   ${isQuote? `<div class="row"><div class="box"><div class="l">Pax</div><div class="v">${esc(q.pax||'—')}</div></div>
   <div class="box"><div class="l">Child ages</div><div class="v">${esc(q.childAges||'—')}</div></div>
@@ -2734,8 +2978,13 @@ function printQuotePdf(id){
   <h2>${isQuote?'Trip requested':'Request details'}</h2>
   <div class="v">${esc(q.destination||q.subject||'—')}</div>
   <div class="fill" style="min-height:auto;border:none;padding:6px 0;color:#1d2433">${esc(q.message||'—')}</div>
-  ${isQuote? `<h2>Quoted pricing &amp; inclusions</h2>
-  <div class="fill">Add rate, inclusions, validity and payment terms here before printing.</div>` : ''}
+  ${q.specialNotes? `<div class="l" style="margin-top:8px">Special notes</div><div class="v">${esc(q.specialNotes)}</div>` : ''}
+  ${comps.length? `<h2>Itinerary &amp; pricing</h2>
+  <table><thead><tr><th>Date</th><th>Activity</th><th>Service</th><th>Supplier</th><th>Ref</th><th>Price</th></tr></thead>
+  <tbody>${comps.map(c=>`<tr><td>${fmtDate(c.travelDate)}</td><td>${esc(c.activity||'—')}</td><td>${esc(c.service||'—')}</td><td>${esc(c.supplier||'—')}</td><td>${esc(c.bookingRef||'—')}</td><td>${esc(c.price||'—')}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td colspan="5" style="text-align:right">Total (EUR)</td><td>€${Math.round(totalPrice).toLocaleString('en-GB')}</td></tr></tfoot>
+  </table>` : (isQuote? `<h2>Quoted pricing &amp; inclusions</h2>
+  <div class="fill">Add rate, inclusions, validity and payment terms here before printing.</div>` : '')}
   <div class="foot">ORN Europe Sales &amp; Operations · confidential draft</div>
   <script>setTimeout(()=>{ try{document.querySelector('.fill').focus&&document.querySelector('.fill').focus();}catch(e){} }, 200);<\/script>
   </body></html>`);
@@ -2757,28 +3006,105 @@ function watchNewQuotes(){
       DB.collection(COLL.quotes).doc(q.id).set(q);
       const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
       const band = qband(q);
-      const sla = q.category==='escalation' ? 'IMMEDIATE — direct to Ken & Ajay' : 'same-day, or within 24h if sourcing required';
-      const toEmail = q.category==='escalation'
-        ? (categoryEmail('escalation')+',ken@orneurope.com,ajay@orneurope.com')
+      const isUrgent = q.category==='escalation' || q.category==='management';
+      const slaHrs = requestSlaHours(q);
+      const sla = isUrgent ? 'IMMEDIATE — direct to Ken & Ajay' : slaHrs+'h response target';
+      const toEmail = isUrgent
+        ? (categoryEmail(q.category)+',ken@orneurope.com,ajay@orneurope.com')
         : categoryEmail(q.category||'quote');
-      if (slackUrl) postSlack((q.category==='escalation'?'🚨 ESCALATION':'🆕 New '+cat.short)+' — '+(q.category==='quote'?band.label:sla)+
+      if (slackUrl) postSlack((isUrgent?'🚨 '+cat.label.toUpperCase():'🆕 New '+cat.short)+' — '+(q.category==='quote'?band.label+' · ':'')+sla+
         '\nFrom: '+(q.name||'')+' ('+(q.email||'')+')'+
         (q.category==='quote'?'\nDeparture: '+(q.departureDate||'not given')+'\nService: '+(q.serviceRequired||q.destination||''):'\nSubject: '+(q.subject||q.destination||''))+
-        (q.bookingRef?'\nRef: '+q.bookingRef:'')+
+        (q.ornRef?'\nORN ref: '+q.ornRef:'')+(q.tagRef||q.bookingRef?'\nTAG ref: '+(q.tagRef||q.bookingRef):'')+
         '\n→ www.orneurope.com/ops (Requests → '+cat.short+')');
       if (ej && ej.serviceId && ej.templateId && ej.publicKey && window.emailjs){
         try{
           window.emailjs.send(ej.serviceId, ej.templateId, {
             to_email: toEmail,
-            category: cat.label, client_name: q.name||'', client_email: q.email||'',
+            category: cat.label, client_name: q.name||'', client_email: q.replyEmail||q.email||'',
             departure_date: q.departureDate||'not given', priority: q.category==='quote'?band.label:sla,
-            destination: q.destination||q.subject||'', service_required: q.serviceRequired||'',
-            booking_ref: q.bookingRef||'', message: q.message||''
+            sla_hours: isUrgent?'Immediate':slaHrs, destination: q.destination||q.subject||'', service_required: q.serviceRequired||'',
+            orn_ref: q.ornRef||'', tag_ref: q.tagRef||q.bookingRef||'', message: q.message||''
           }, ej.publicKey);
         }catch(e){ console.error('EmailJS send failed', e); }
       }
     }
   });
+}
+/* Itinerary on a request — same component shape as a live booking (travelDate,
+   activity, voucher, service, supplier, bookingRef, pickupTime, status, quoted,
+   estimated, paid), so it drops straight into a booking's component list later
+   with no reformatting. Renders inline under the Requests table. */
+let openQuoteItineraryId = null;
+function openQuoteItinerary(quoteId){
+  openQuoteItineraryId = (openQuoteItineraryId===quoteId) ? null : quoteId;
+  renderQuoteItinerary();
+}
+function renderQuoteItinerary(){
+  const el = document.getElementById('quoteItinerary');
+  if (!el) return;
+  if (!openQuoteItineraryId){ el.innerHTML = ''; return; }
+  const q = state.quotes.find(x=>x.id===openQuoteItineraryId);
+  if (!q){ el.innerHTML = ''; return; }
+  q.components = q.components || [];
+  let totalCost=0, totalMargin=0, totalPrice=0;
+  q.components.forEach(c=>{
+    const cm = parseMoney(c.cost); const ce = cm? toEUR(cm) : 0;
+    const mm = parseMoney(c.margin); const me = mm? toEUR(mm) : 0;
+    const pm = parseMoney(c.price); const pe = pm? toEUR(pm) : 0;
+    totalCost += ce; totalMargin += me; totalPrice += pe;
+  });
+  el.innerHTML = `
+    <div class="card" style="margin-top:10px">
+      <div class="flex-between"><h3>Itinerary &amp; pricing — ${esc(q.name)} (${esc((REQUEST_CATEGORIES[q.category||'quote']||{}).short||'')})</h3>
+      <span><button class="btn ghost small" onclick="addQuoteComponent('${q.id}')">+ Add component</button>
+      <button class="btn ghost small" onclick="openQuoteItineraryId=null;renderQuoteItinerary()">Close</button></span></div>
+      <div class="hint" style="margin-bottom:8px">Same fields as a live booking's components, plus cost/margin/price for quoting — build it here, ready to carry across once confirmed as a booking.</div>
+      <div class="tbl-scroll"><table class="bk static">
+        <thead><tr><th>Date</th><th>Activity</th><th>Service</th><th>Supplier</th><th>Booking ref</th><th>Voucher</th><th>Status</th><th>Our cost</th><th>Margin (ORNMU)</th><th>Quote price</th><th></th></tr></thead>
+        <tbody>${q.components.map((c,i)=>`<tr>
+          <td><input type="date" value="${esc(c.travelDate||'')}" onchange="editQuoteComponent('${q.id}',${i},'travelDate',this.value)" style="min-width:130px"></td>
+          <td><input value="${esc(c.activity||'')}" placeholder="Activity / description" onchange="editQuoteComponent('${q.id}',${i},'activity',this.value)" style="min-width:190px"></td>
+          <td><select onchange="editQuoteComponent('${q.id}',${i},'service',this.value)">${SERVICES.map(s=>`<option ${c.service===s?'selected':''}>${s}</option>`).join('')}</select></td>
+          <td><input value="${esc(c.supplier||'')}" placeholder="Supplier" onchange="editQuoteComponent('${q.id}',${i},'supplier',this.value)" style="min-width:120px"></td>
+          <td><input value="${esc(c.bookingRef||'')}" placeholder="Ref" onchange="editQuoteComponent('${q.id}',${i},'bookingRef',this.value)" style="min-width:90px"></td>
+          <td><input value="${esc(c.voucher||'')}" placeholder="No voucher required" onchange="editQuoteComponent('${q.id}',${i},'voucher',this.value)" style="min-width:110px"></td>
+          <td><select onchange="editQuoteComponent('${q.id}',${i},'status',this.value)">${STATUSES.map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+          <td><input value="${esc(c.cost||'')}" placeholder="e.g. 120 EUR" onchange="editQuoteComponent('${q.id}',${i},'cost',this.value)" style="min-width:90px"></td>
+          <td><input value="${esc(c.margin||'')}" placeholder="e.g. 25 EUR" onchange="editQuoteComponent('${q.id}',${i},'margin',this.value)" style="min-width:90px"></td>
+          <td><input value="${esc(c.price||'')}" placeholder="e.g. 145 EUR" onchange="editQuoteComponent('${q.id}',${i},'price',this.value)" style="min-width:90px"></td>
+          <td><button class="btn danger small" onclick="removeQuoteComponent('${q.id}',${i})">✕</button></td>
+        </tr>`).join('') || '<tr><td colspan="11" class="empty">No components yet — click Add component.</td></tr>'}</tbody>
+        ${q.components.length? `<tfoot><tr style="font-weight:700"><td colspan="7" style="text-align:right">Totals (EUR)</td>
+          <td>€${Math.round(totalCost).toLocaleString('en-GB')}</td>
+          <td>€${Math.round(totalMargin).toLocaleString('en-GB')}</td>
+          <td>€${Math.round(totalPrice).toLocaleString('en-GB')}</td><td></td></tr></tfoot>`:''}
+      </table></div>
+      <div class="hint" style="margin-top:6px">Quote price should equal cost + margin per line — the totals row is a running check, not auto-calculated, so you can round/adjust per line as needed.</div>
+    </div>`;
+}
+function addQuoteComponent(quoteId){
+  const q = state.quotes.find(x=>x.id===quoteId); if (!q) return;
+  q.components = q.components || [];
+  q.components.push({travelDate:q.departureDate||todayISO(), activity:'', voucher:'No voucher required', service:'TOUR',
+    supplier:'', bookingRef:'', pickupTime:'', status:'Pending', cost:'', margin:'', price:''});
+  saveListItem('quotes', q);
+  logActivity(q.name||'-', 'Itinerary component added to request');
+  renderQuoteItinerary();
+}
+function editQuoteComponent(quoteId, i, field, val){
+  const q = state.quotes.find(x=>x.id===quoteId); if (!q) return;
+  q.components[i][field] = val;
+  saveListItem('quotes', q);
+  renderQuoteItinerary();
+}
+function removeQuoteComponent(quoteId, i){
+  const q = state.quotes.find(x=>x.id===quoteId); if (!q) return;
+  if (!confirm('Remove this component from the itinerary?')) return;
+  q.components.splice(i,1);
+  saveListItem('quotes', q);
+  logActivity(q.name||'-', 'Itinerary component removed from request');
+  renderQuoteItinerary();
 }
 const DIR_CATS = ['Activity supplier','Transfer company','Driver','DMC','Portal login','Hotel platform','Pipeline','Target list'];
 let dirFilters = { q:'', cat:'', dest:'', src:'', login:'', sort:'name', dir:1 };
@@ -4198,12 +4524,20 @@ function renderFinance(){
     return;
   }
   const uk = state.bookings.filter(b=>era(b)==='uk');
-  let saving=0, loss=0;
+  let saving=0, loss=0, marginTotal=0, marginCount=0;
   const bySrc = {USA:{s:0,l:0}, Australia:{s:0,l:0}};
+  const marginByMonth = {};
   uk.forEach(b=>activeComps(b).forEach(c=>{
-    const v=compVariance(c); if(!v) return;
-    if (v.eur<0) saving+=-v.eur; else loss+=v.eur;
-    const t=bySrc[b.source]; if(t){ if(v.eur<0)t.s+=-v.eur; else t.l+=v.eur; }
+    const v=compVariance(c); if(v){
+      if (v.eur<0) saving+=-v.eur; else loss+=v.eur;
+      const t=bySrc[b.source]; if(t){ if(v.eur<0)t.s+=-v.eur; else t.l+=v.eur; }
+    }
+    const mm = parseMoney(c.ornmu); const me = mm? toEUR(mm) : null;
+    if (me!=null){
+      marginTotal += me; marginCount++;
+      const mk = (c.travelDate||'').slice(0,7)||'?';
+      marginByMonth[mk] = (marginByMonth[mk]||0) + me;
+    }
   }));
   const net = saving - loss;
   const euro = v => (v<0?'-':'')+'\u20AC'+Math.abs(v).toLocaleString('en-GB',{maximumFractionDigits:0});
@@ -4235,6 +4569,9 @@ function renderFinance(){
         <div class="bignum ${net>=0?'saving':'loss'}">${net>=0?'':'-'}\u20AC${Math.abs(net).toLocaleString('en-GB',{maximumFractionDigits:0})} ${net>=0?'saved':'lost'}</div>
         <div class="subnum">▲ ${euro(saving)} savings · ▼ ${euro(loss)} losses</div>
         <div class="subnum" style="margin-top:4px">${['USA','Australia'].map(s=>{const t=bySrc[s];const n=t.s-t.l;return s+': <b class="'+(n>=0?'var-pos':'var-neg')+'">'+(n>=0?'+':'-')+'\u20AC'+Math.abs(n).toLocaleString('en-GB',{maximumFractionDigits:0})+'</b>';}).join(' · ')}</div></div>
+      <div class="card"><h3>ORNMU — EU margin</h3>
+        <div class="bignum saving">\u20AC${Math.round(marginTotal).toLocaleString('en-GB')}</div>
+        <div class="subnum">across ${marginCount} component${marginCount===1?'':'s'} with a margin recorded</div></div>
       <div class="card"><h3>Card balances — to invoice back</h3>
         <div class="stat-list">${Object.entries(cardTotals).map(([cd,t])=>`
           <div class="row"><span>${esc(cd)}<div class="hint" style="margin:0">${t.n} txns · ${euro(t.total)} total spend</div></span>
@@ -4445,11 +4782,15 @@ function renderSettings(){
           <input id="ejPublic" style="flex:1;min-width:180px" placeholder="EmailJS Public Key" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.publicKey)||'')}" ${isAdmin?'':'disabled'}>
         </div>
         <div class="hint" style="margin-bottom:6px">Routing inboxes — one per request type, per Lisa's email. Escalations always also go to Ken &amp; Ajay directly.</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<input id="catEmail_${k}" style="flex:1;min-width:200px" placeholder="${esc(c.label)} inbox" value="${esc(categoryEmail(k))}" ${isAdmin?'':'disabled'}>`).join('')}
+        </div>
+        <div class="hint" style="margin-bottom:6px">Timer defaults (hours) — quote reply &amp; booking confirmation is 72h, booking queries 24h; each request can also be overridden individually on the Requests screen.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span style="display:flex;align-items:center;gap:4px;min-width:140px"><input id="catSla_${k}" type="number" min="1" style="width:60px" value="${esc(categorySlaHours(k))}" ${isAdmin?'':'disabled'}><span class="hint" style="margin:0">h ${esc(c.short)}</span></span>`).join('')}
           ${isAdmin?`<button class="btn small" onclick="saveEmailJs()">Save</button>`:''}
         </div>
-        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service and a template with variables <code>to_email, category, client_name, client_email, departure_date, priority, destination, service_required, booking_ref, message</code>, then paste the three IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email.</div>
+        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service and a template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>, then paste the three IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email.</div>
         <div class="section-lbl">Email client (this device)</div>
         <select onchange="localStorage.setItem('ornrecon_mailclient', this.value);">
           ${[['','Not set - ask me next time'],['outlook','Outlook (desktop app)'],['outlookweb','Outlook on the web'],['gmail','Gmail (web)'],['applemail','Apple Mail / system default'],['copy','Other webmail - copy to clipboard']].map(([v,l])=>`<option value="${v}" ${(localStorage.getItem('ornrecon_mailclient')||'')===v?'selected':''}>${l}</option>`).join('')}
@@ -4566,11 +4907,15 @@ function saveEmailJs(){
   state.notify = state.notify || {};
   state.notify.emailjs = {serviceId, templateId, publicKey};
   const categoryEmails = {};
+  const categorySla = {};
   Object.keys(REQUEST_CATEGORIES).forEach(k=>{
     const inp = document.getElementById('catEmail_'+k);
     if (inp) categoryEmails[k] = inp.value.trim();
+    const slaInp = document.getElementById('catSla_'+k);
+    if (slaInp && slaInp.value) categorySla[k] = Number(slaInp.value);
   });
   state.notify.categoryEmails = categoryEmails;
+  state.notify.categorySla = categorySla;
   saveNotify();
   toast('Request routing settings saved');
 }

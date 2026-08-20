@@ -253,6 +253,7 @@ const DEFAULT_USERS = [
   {id:'DB', name:'Dora Bobadilla', pass:'ornopsdb', role:'editor', position:'Operations Exec', phone:'', email:'dora.b@nexusdmc.com', company:'ORN Australia', country:'Australia'},
   {id:'MU', name:'MS Muskan', pass:'ornopsmu', role:'editor', position:'Operations Exec', phone:'+61 474 884 169', email:'muskan@tripfactory.com', company:'ORN Australia', country:'Australia'},
   {id:'DS', name:'Deepa Srivastava', pass:'ornopsds', role:'editor', position:'Operations Exec', phone:'+61 403 199 959', email:'deepa.s@tripfactory.com', company:'ORN Australia', country:'Australia'},
+  {id:'DHR', name:'Dhruv Soni', pass:'ornopsds', role:'editor', position:'', phone:'', email:'', company:'ORN', country:''},
   {id:'HK', name:'Harish K', pass:'ornopshk', role:'editor', position:'Operations Exec', phone:'+61 431 298 566', email:'harish.k@nexusdmc.com', company:'ORN Australia', country:'Australia'}
 ];
 const HOTEL_STATUSES = ['Not Actioned','In Progress','Contracted','Declined'];
@@ -465,11 +466,11 @@ function renderHome(){
         <p>The confidential master directory — every supplier's contacts, commercial terms and system logins (${state.directory.length} suppliers). Senior team only.</p>
         <div class="cnt ${dirAllowed()?'':'restricted'}">${dirAllowed()? 'Access →' : 'Restricted Access'}</div>
       </div>
-      <div class="tile restricted" onclick="alert('Sales workspace coming soon — send Ajay the data to build it.')">
+      <div class="tile" onclick="window.location.href=OPS_URL+'?go=quotes'">
         <div class="ic">📈</div>
-        <h3>Sales</h3>
-        <p>Sales pipeline and performance workspace.</p>
-        <div class="cnt restricted">Coming soon</div>
+        <h3>Sales &amp; Quotes</h3>
+        <p>The client quote/request pipeline — quote &amp; loading requests, booking admin, customer support and escalations, one form in, prioritised and tracked to a sent quote.</p>
+        <div class="cnt">Access →</div>
       </div>
     </div>`;
 }
