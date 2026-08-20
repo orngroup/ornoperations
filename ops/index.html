@@ -849,19 +849,31 @@ function tband(b){
 /* Four request categories per Lisa's routing email — each maps to a dedicated
    inbox address (default per her email, editable in Settings). */
 const REQUEST_CATEGORIES = {
-  quote:      {label:'Quote / product loading',   short:'Quote & loading',   color:'var(--gold)',    defaultEmail:'quoteseu@orn.com',      slaHours:72},
+  new_quote:   {label:'New quote',                    short:'New quote',        color:'var(--gold)',    defaultEmail:'quoteseu@orn.com',      slaHours:72},
+  quote_addon: {label:'Additional to existing quote/booking', short:'Add-on quote', color:'#c9973e',      defaultEmail:'quoteseu@orn.com',      slaHours:72},
+  group_quote: {label:'Group tour quote',             short:'Group quote',      color:'#b8860b',         defaultEmail:'quoteseu@orn.com',      slaHours:72},
   support:    {label:'Booking admin / operational',short:'Booking admin',    color:'var(--muted)',   defaultEmail:'supporteu@orn.com',     slaHours:24},
   customer:   {label:'Customer contact / support', short:'Customer',         color:'#5b8def',         defaultEmail:'customereu@orn.com',    slaHours:24},
   escalation: {label:'Escalation',                 short:'Escalation',       color:'var(--danger)',  defaultEmail:'escalationseu@orn.com', slaHours:4},
   management: {label:'Management escalation',      short:'Mgmt escalation',  color:'#8b1a3f',         defaultEmail:'escalationseu@orn.com', slaHours:8}
 };
+/* 'quote' (singular) is kept as a recognised legacy category so requests
+   submitted before this change keep working exactly as they did — it behaves
+   identically to new_quote in every check below. */
+const LEGACY_QUOTE_CATS = ['quote','new_quote','quote_addon','group_quote'];
+function isQuoteType(cat){ return LEGACY_QUOTE_CATS.includes(cat||'new_quote'); }
+function categoryMeta(cat){
+  if (cat==='quote') return REQUEST_CATEGORIES.new_quote;
+  return REQUEST_CATEGORIES[cat] || REQUEST_CATEGORIES.new_quote;
+}
 /* Timer / SLA: quote reply & booking confirmation = 72h from receipt, booking
    queries = 24h, per Ajay's spec. Defaults are editable per-category in
    Settings; each request can also have its own override (slaOverrideHours). */
 function categorySlaHours(cat){
   const cfg = (state.notify && state.notify.categorySla) || {};
-  const v = cfg[cat];
-  return (v!=null && v!=='') ? Number(v) : ((REQUEST_CATEGORIES[cat]||{}).slaHours ?? 24);
+  const key = cat==='quote' ? 'new_quote' : cat;
+  const v = cfg[key];
+  return (v!=null && v!=='') ? Number(v) : (categoryMeta(cat).slaHours ?? 24);
 }
 function requestSlaHours(q){
   return (q.slaOverrideHours!=null && q.slaOverrideHours!=='') ? Number(q.slaOverrideHours) : categorySlaHours(q.category||'quote');
@@ -1218,17 +1230,17 @@ function renderDashboard(){
 
     ${(()=>{
       const open = state.quotes.filter(q=>q.status!=='Won' && q.status!=='Lost');
-      const urgent = open.filter(q=>(q.category||'quote')==='quote' && ['qtravel','q7'].includes(qband(q).key));
+      const urgent = open.filter(q=>isQuoteType(q.category) && ['qtravel','q7'].includes(qband(q).key));
       const esc2 = q=>['escalation','management'].includes(q.category);
       const latest = state.quotes.slice().sort((a,z)=>(z.ts||'').localeCompare(a.ts||''))[0];
       return `<div class="support-banner ${open.some(esc2)?'has-open':''}" onclick="switchView('quotes')" title="Open the Requests queue">
         <span>
           <div class="sb-title">${open.some(esc2)? '📋 Requests — escalation needs attention' : '📋 Requests'}</div>
           <div class="sb-sub">One form, routed by type · orngroup.github.io/ornoperations/quote-request/</div>
-          ${latest? `<div class="sb-latest">Latest: <b>${esc((latest.destination||latest.subject||'').slice(0,44))}</b> — ${esc(latest.name||'')} (${esc((REQUEST_CATEGORIES[latest.category||'quote']||{}).short||'')})</div>`:''}
+          ${latest? `<div class="sb-latest">Latest: <b>${esc((latest.destination||latest.subject||'').slice(0,44))}</b> — ${esc(latest.name||'')} (${esc((categoryMeta(latest.category)).short||'')})</div>`:''}
         </span>
         <span class="sb-stats">
-          ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span class="sb-box"><div class="n">${state.quotes.filter(q=>(q.category||'quote')===k && q.status!=='Won' && q.status!=='Lost').length}</div><div class="l">${esc(c.short)}</div></span>`).join('')}
+          ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span class="sb-box"><div class="n">${state.quotes.filter(q=>{ const qc=q.category==='quote'?'new_quote':(q.category||'new_quote'); return qc===k; }).filter(q=>q.status!=='Won' && q.status!=='Lost').length}</div><div class="l">${esc(c.short)}</div></span>`).join('')}
         </span>
         ${urgent.length? `<span class="sb-urgent">⚠ ${urgent.length} quote request${urgent.length===1?'':'s'} — travelling within 7 days</span>`:''}
         <span class="sb-go">Open queue →</span>
@@ -1254,7 +1266,7 @@ function renderDashboard(){
         <h3>Requests by time remaining · click to open</h3>
         <div class="stat-list">
         ${open.slice(0,10).map(q=>{
-          const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
+          const cat = categoryMeta(q.category);
           return `<div class="row" style="cursor:pointer" onclick="switchView('quotes')">
             <span><span class="badge" style="background:${cat.color};color:#fff;margin-right:6px">${esc(cat.short)}</span>${esc(q.name)} — ${esc((q.destination||q.subject||'').slice(0,40))}</span>
             <b style="color:${q.__t.color}">${esc(q.__t.label)}</b></div>`;
@@ -2745,14 +2757,14 @@ function renderQuotes(){
   const el = document.getElementById('view-quotes');
   if (!el) return;
   let rows = state.quotes.slice().map(q=>({...q, __band: qband(q), __time: requestTimeBand(q)}));
-  if (quoteCatFilter) rows = rows.filter(q=>(q.category||'quote')===quoteCatFilter);
+  if (quoteCatFilter) rows = rows.filter(q=>{ const c = q.category==='quote'?'new_quote':(q.category||'new_quote'); return c===quoteCatFilter; });
   rows.sort((a,z)=> a.__time.order - z.__time.order || (a.__time.hoursLeft??999) - (z.__time.hoursLeft??999));
   const receiptFor = id => Object.values(state.attachments).find(a=>a.bookingId==='QUOTE-'+id);
-  const countFor = cat => state.quotes.filter(q=>(q.category||'quote')===cat && q.status!=='Won' && q.status!=='Lost').length;
+  const countFor = cat => state.quotes.filter(q=>{ const c = q.category==='quote'?'new_quote':(q.category||'new_quote'); return c===cat; }).filter(q=>q.status!=='Won' && q.status!=='Lost').length;
 
   // Pipeline stats — quote/loading requests only, since that's the only category
   // that carries a monetary value (via the itinerary).
-  const quoteReqs = state.quotes.filter(q=>(q.category||'quote')==='quote');
+  const quoteReqs = state.quotes.filter(q=>isQuoteType(q.category));
   const openQuoteReqs = quoteReqs.filter(q=>q.status!=='Won' && q.status!=='Lost');
   const wonReqs = quoteReqs.filter(q=>q.status==='Won');
   const lostReqs = quoteReqs.filter(q=>q.status==='Lost');
@@ -2808,12 +2820,12 @@ function renderQuotes(){
       <thead><tr><th>Type</th><th>Time left</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Itinerary</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
       <tbody>${rows.map(q=>{
         const rc = receiptFor(q.id);
-        const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
+        const cat = categoryMeta(q.category);
         return `<tr>
         <td><span class="badge" style="background:${cat.color};color:#fff">${esc(cat.short)}</span></td>
         <td><span class="badge" style="background:${q.__time.color};color:#fff">${esc(q.__time.label)}</span><div class="hint" style="margin-top:3px"><input type="number" min="1" value="${q.slaOverrideHours!=null?esc(q.slaOverrideHours):''}" placeholder="${categorySlaHours(q.category||'quote')}h default" onchange="editQuote('${q.id}','slaOverrideHours',this.value?Number(this.value):null)" style="width:80px;font-size:11px;padding:3px 6px"></div></td>
-        <td>${q.category==='quote'?`<span class="badge" style="background:${QBAND_COLOR[q.__band.key]};color:#fff">${esc(q.__band.label)}</span>`:'<span class="hint">—</span>'}</td>
-        <td>${q.category==='quote'?fmtDate(q.departureDate):'—'}</td>
+        <td>${isQuoteType(q.category)?`<span class="badge" style="background:${QBAND_COLOR[q.__band.key]};color:#fff">${esc(q.__band.label)}</span>`:'<span class="hint">—</span>'}</td>
+        <td>${isQuoteType(q.category)?fmtDate(q.departureDate):'—'}</td>
         <td><b>${esc(q.name)}</b><div class="hint">${esc(q.email)}${q.phone?' · '+esc(q.phone):''}${q.agency?' · '+esc(q.agency):''}${q.replyEmail && q.replyEmail!==q.email?'<br>Reply to: '+esc(q.replyEmail):''}</div></td>
         <td style="max-width:220px">${esc((q.destination||q.subject||'').slice(0,60))}${q.serviceRequired?'<div class="hint">'+esc(q.serviceRequired.slice(0,50))+'</div>':''}<div class="hint">${esc((q.message||'').slice(0,80))}</div>${q.category==='management'?`<div class="hint" style="margin-top:4px"><b>Impact:</b> ${esc((q.impact||'—').slice(0,60))}<br><b>Tried:</b> ${esc((q.triedAlready||'—').slice(0,60))}</div>`:''}</td>
         <td>${esc(q.pax||'—')}${q.childAges?' ('+esc(q.childAges)+')':''}</td>
@@ -2929,7 +2941,7 @@ function quoteTotals(q){
 function renderSales(){
   const el = document.getElementById('view-sales');
   if (!el) return;
-  const quotesOnly = state.quotes.filter(q=>(q.category||'quote')==='quote');
+  const quotesOnly = state.quotes.filter(q=>isQuoteType(q.category));
   const received = quotesOnly.length;
   const given = quotesOnly.filter(q=>['Quoted','Sent','Won','Lost'].includes(q.status)).length;
   const won = quotesOnly.filter(q=>q.status==='Won');
@@ -2992,8 +3004,8 @@ function renderSales(){
    voucher/report print pattern (Ctrl/Cmd+P → Save as PDF). */
 function printQuotePdf(id){
   const q = state.quotes.find(x=>x.id===id); if (!q) return;
-  const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
-  const isQuote = (q.category||'quote')==='quote';
+  const cat = categoryMeta(q.category);
+  const isQuote = isQuoteType(q.category);
   const comps = q.components || [];
   let totalCost=0, totalMargin=0, totalPrice=0;
   comps.forEach(c=>{
@@ -3062,7 +3074,7 @@ function watchNewQuotes(){
     if (q.status==='New' && !q.alerted){
       q.alerted = true;
       DB.collection(COLL.quotes).doc(q.id).set(q);
-      const cat = REQUEST_CATEGORIES[q.category||'quote'] || REQUEST_CATEGORIES.quote;
+      const cat = categoryMeta(q.category);
       const band = qband(q);
       const isUrgent = q.category==='escalation' || q.category==='management';
       const slaHrs = requestSlaHours(q);
@@ -3070,9 +3082,9 @@ function watchNewQuotes(){
       const toEmail = isUrgent
         ? (categoryEmail(q.category)+',ken@orneurope.com,ajay@orneurope.com')
         : categoryEmail(q.category||'quote');
-      if (slackUrl) postSlack((isUrgent?'🚨 '+cat.label.toUpperCase():'🆕 New '+cat.short)+' — '+(q.category==='quote'?band.label+' · ':'')+sla+
+      if (slackUrl) postSlack((isUrgent?'🚨 '+cat.label.toUpperCase():'🆕 New '+cat.short)+' — '+(isQuoteType(q.category)?band.label+' · ':'')+sla+
         '\nFrom: '+(q.name||'')+' ('+(q.email||'')+')'+
-        (q.category==='quote'?'\nDeparture: '+(q.departureDate||'not given')+'\nService: '+(q.serviceRequired||q.destination||''):'\nSubject: '+(q.subject||q.destination||''))+
+        (isQuoteType(q.category)?'\nDeparture: '+(q.departureDate||'not given')+'\nService: '+(q.serviceRequired||q.destination||''):'\nSubject: '+(q.subject||q.destination||''))+
         (q.ornRef?'\nORN ref: '+q.ornRef:'')+(q.tagRef||q.bookingRef?'\nTAG ref: '+(q.tagRef||q.bookingRef):'')+
         '\n→ www.orneurope.com/ops (Requests → '+cat.short+')');
       if (ej && ej.serviceId && ej.templateId && ej.publicKey && window.emailjs){
@@ -3080,7 +3092,7 @@ function watchNewQuotes(){
           window.emailjs.send(ej.serviceId, ej.templateId, {
             to_email: toEmail,
             category: cat.label, client_name: q.name||'', client_email: q.replyEmail||q.email||'',
-            departure_date: q.departureDate||'not given', priority: q.category==='quote'?band.label:sla,
+            departure_date: q.departureDate||'not given', priority: isQuoteType(q.category)?band.label:sla,
             sla_hours: isUrgent?'Immediate':slaHrs, destination: q.destination||q.subject||'', service_required: q.serviceRequired||'',
             orn_ref: q.ornRef||'', tag_ref: q.tagRef||q.bookingRef||'', message: q.message||''
           }, ej.publicKey);
@@ -3114,12 +3126,12 @@ function renderQuoteItinerary(){
   });
   el.innerHTML = `
     <div class="card" style="margin-top:10px">
-      <div class="flex-between"><h3>Itinerary &amp; pricing — ${esc(q.name)} (${esc((REQUEST_CATEGORIES[q.category||'quote']||{}).short||'')})</h3>
+      <div class="flex-between"><h3>Itinerary &amp; pricing — ${esc(q.name)} (${esc(categoryMeta(q.category).short||'')})</h3>
       <span><button class="btn ghost small" onclick="addQuoteComponent('${q.id}')">+ Add component</button>
       <button class="btn ghost small" onclick="openQuoteItineraryId=null;renderQuoteItinerary()">Close</button></span></div>
-      <div class="hint" style="margin-bottom:8px">Same fields as a live booking's components, plus cost/margin/price for quoting — build it here, ready to carry across once confirmed as a booking.</div>
+      <div class="hint" style="margin-bottom:8px">Same fields as a live booking's components, plus Net / Margin / Gross for costing — build it here, ready to carry across once confirmed as a booking.</div>
       <div class="tbl-scroll"><table class="bk static">
-        <thead><tr><th>Date</th><th>Activity</th><th>Service</th><th>Supplier</th><th>Booking ref</th><th>Voucher</th><th>Status</th><th>Our cost</th><th>Margin (ORNMU)</th><th>Quote price</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Component type</th><th>Description</th><th>Supplier</th><th>Booking ref</th><th>Voucher</th><th>Status</th><th>Net</th><th>Margin</th><th>Gross</th><th></th></tr></thead>
         <tbody>${q.components.map((c,i)=>`<tr>
           <td><input type="date" value="${esc(c.travelDate||'')}" onchange="editQuoteComponent('${q.id}',${i},'travelDate',this.value)" style="min-width:130px"></td>
           <td><input value="${esc(c.activity||'')}" placeholder="Activity / description" onchange="editQuoteComponent('${q.id}',${i},'activity',this.value)" style="min-width:190px"></td>
@@ -3128,9 +3140,9 @@ function renderQuoteItinerary(){
           <td><input value="${esc(c.bookingRef||'')}" placeholder="Ref" onchange="editQuoteComponent('${q.id}',${i},'bookingRef',this.value)" style="min-width:90px"></td>
           <td><input value="${esc(c.voucher||'')}" placeholder="No voucher required" onchange="editQuoteComponent('${q.id}',${i},'voucher',this.value)" style="min-width:110px"></td>
           <td><select onchange="editQuoteComponent('${q.id}',${i},'status',this.value)">${STATUSES.map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-          <td><input value="${esc(c.cost||'')}" placeholder="e.g. 120 EUR" onchange="editQuoteComponent('${q.id}',${i},'cost',this.value)" style="min-width:90px"></td>
+          <td><input value="${esc(c.cost||'')}" placeholder="Net e.g. 120 EUR" onchange="editQuoteComponent('${q.id}',${i},'cost',this.value)" style="min-width:90px"></td>
           <td><input value="${esc(c.margin||'')}" placeholder="e.g. 25 EUR" onchange="editQuoteComponent('${q.id}',${i},'margin',this.value)" style="min-width:90px"></td>
-          <td><input value="${esc(c.price||'')}" placeholder="e.g. 145 EUR" onchange="editQuoteComponent('${q.id}',${i},'price',this.value)" style="min-width:90px"></td>
+          <td><input value="${esc(c.price||'')}" placeholder="Gross e.g. 145 EUR" onchange="editQuoteComponent('${q.id}',${i},'price',this.value)" style="min-width:90px"></td>
           <td><button class="btn danger small" onclick="removeQuoteComponent('${q.id}',${i})">✕</button></td>
         </tr>`).join('') || '<tr><td colspan="11" class="empty">No components yet — click Add component.</td></tr>'}</tbody>
         ${q.components.length? `<tfoot><tr style="font-weight:700"><td colspan="7" style="text-align:right">Totals (EUR)</td>
@@ -3138,7 +3150,7 @@ function renderQuoteItinerary(){
           <td>€${Math.round(totalMargin).toLocaleString('en-GB')}</td>
           <td>€${Math.round(totalPrice).toLocaleString('en-GB')}</td><td></td></tr></tfoot>`:''}
       </table></div>
-      <div class="hint" style="margin-top:6px">Quote price should equal cost + margin per line — the totals row is a running check, not auto-calculated, so you can round/adjust per line as needed.</div>
+      <div class="hint" style="margin-top:6px">Gross should equal Net + Margin per line — the totals row is a running check, not auto-calculated, so you can round/adjust per line as needed.</div>
     </div>`;
 }
 function addQuoteComponent(quoteId){
