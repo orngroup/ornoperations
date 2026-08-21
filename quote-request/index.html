@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;color:#1d2433;display:flex;align-items:flex-start;justify-content:center;padding:26px 14px;
@@ -32,18 +33,29 @@ body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;color:#1d2433;d
 .supplier-stats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .supplier-stats .stat{background:#fdecec;color:#c8102e;font-weight:700;font-size:16px;border-radius:8px;padding:8px 12px;text-align:center;flex:1;min-width:70px}
 .supplier-stats .stat small{display:block;font-weight:400;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#c8102e;opacity:.8;margin-top:1px}
-.acc-item{border:1px solid #e6e9ef;border-radius:8px;margin-bottom:6px;overflow:hidden}
-.acc-hd{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;cursor:pointer;font-size:12px;font-weight:700;color:#1d2433;background:#fbfbfd}
+.supplier-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+@media(max-width:560px){.supplier-grid{grid-template-columns:1fr}}
+.acc-item{border:1px solid #e6e9ef;border-radius:9px;overflow:hidden;background:#fff}
+.acc-item.wide{grid-column:1/-1}
+.acc-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;cursor:pointer;font-size:12.3px;font-weight:700;color:#1d2433;background:#fbfbfd;gap:8px}
 .acc-hd:hover{background:#f4f6fa}
-.acc-hd .cnt{color:#c8102e;font-weight:700}
-.acc-body{display:none;padding:8px 12px 12px;font-size:11.3px;color:#5f6880;line-height:1.7}
+.acc-hd .cnt{background:#fdecec;color:#c8102e;font-weight:800;font-size:11.5px;padding:3px 9px;border-radius:10px;flex-shrink:0}
+.acc-body{display:none;padding:10px 13px 13px;font-size:11.2px;color:#5f6880;line-height:1.75;border-top:1px solid #eceff4}
 .acc-item.open .acc-body{display:block}
 .acc-item.open .acc-arrow{transform:rotate(90deg)}
-.acc-arrow{display:inline-block;transition:transform .15s;margin-right:6px;color:#9aa2b5}
+.acc-arrow{display:inline-block;transition:transform .15s;margin-right:7px;color:#c8102e;font-size:9px}
+.acc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .guide-foot{font-size:10.5px;color:#9aa2b5;margin-top:14px;padding-top:14px;border-top:1px solid #eceff4}
-.brand-bar{background:#c8102e;border-radius:14px 14px 0 0;padding:16px 26px;display:flex;align-items:center;gap:12px}
-.brand-bar .orn{color:#fff;font-weight:800;font-size:22px;letter-spacing:4px}
-.brand-bar .sub{color:#ffe3e3;font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.9}
+.countdown{background:#f4f6fa;border-radius:10px;padding:16px;margin:16px 0;text-align:center}
+.countdown .lbl{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:#5f6880;font-weight:700;margin-bottom:6px}
+.countdown .clock{font-size:22px;font-weight:800;color:#c8102e;letter-spacing:.5px}
+.countdown .by{font-size:11px;color:#5f6880;margin-top:6px}
+.brand-bar{background:#c8102e;border-radius:16px 16px 0 0;padding:24px 34px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 6px 18px rgba(200,16,46,.35)}
+.brand-bar .left{display:flex;align-items:center;gap:14px}
+.brand-bar .orn{color:#fff;font-weight:800;font-size:27px;letter-spacing:5px}
+.brand-bar .sub{color:#ffe3e3;font-size:11.5px;letter-spacing:2px;text-transform:uppercase;opacity:.9;margin-top:2px}
+.brand-bar .chip{background:rgba(255,255,255,.16);color:#fff;font-size:11.5px;font-weight:700;padding:8px 16px;border-radius:20px;white-space:nowrap}
+@media(max-width:560px){.brand-bar{flex-direction:column;align-items:flex-start;padding:20px 22px}}
 .card{background:#fff;border-radius:0 0 14px 14px;padding:30px 32px;box-shadow:0 20px 54px rgba(4,7,13,.5)}
 h1{font-size:19px;font-weight:800;margin-bottom:4px;color:#1d2433}
 .lead{color:#5f6880;font-size:12.5px;margin-bottom:18px}
@@ -79,7 +91,10 @@ textarea{min-height:80px;resize:vertical}
 </head>
 <body>
 <div class="wrap">
-  <div class="brand-bar"><div class="orn">ORN</div><div class="sub">Europe · Sales &amp; Operations</div></div>
+  <div class="brand-bar">
+    <div class="left"><div class="orn">ORN</div><div class="sub">Europe · Sales &amp; Operations</div></div>
+    <div class="chip">150 suppliers secured · SLA-backed response</div>
+  </div>
   <div class="layout">
   <div>
   <div class="card" id="formCard">
@@ -115,6 +130,11 @@ textarea{min-height:80px;resize:vertical}
       <div><label>Agency / client (if any)</label><input id="fAgency" placeholder="e.g. TAG USA, Best in Travel"></div>
     </div>
     <label>Email to reply to (if different from above)</label><input id="fReplyEmail" type="email" placeholder="Leave blank to reply to your email above">
+    <label>How urgent is this?</label>
+    <select id="fUrgency">
+      <option value="standard">Standard — normal response time applies</option>
+      <option value="urgent">Urgent — please prioritise if possible</option>
+    </select>
 
     <div class="section-hd">Booking reference</div>
     <div class="row3">
@@ -162,11 +182,21 @@ textarea{min-height:80px;resize:vertical}
     <p>Your reference — quote it in any follow-up:</p>
     <div class="ref" id="okRef"></div>
     <p>The Europe team has it now and will come back to you at <b id="okEmail"></b>.</p>
+    <div class="countdown" id="okCountdown"></div>
     <button class="btn" onclick="location.reload()">Submit another request</button>
   </div>
   </div>
 
   <div class="guide">
+    <h2 style="margin-top:0">Our secured supplier access</h2>
+    <p>150 suppliers across 9 service categories — if it's not loaded in the system, we can very likely still quote it. Tap a category to see the full list.</p>
+    <div class="supplier-stats">
+      <div class="stat">150<small>Suppliers</small></div>
+      <div class="stat">9<small>Categories</small></div>
+      <div class="stat">24h<small>Missing-product SLA</small></div>
+    </div>
+    <div class="supplier-grid" id="supplierAccordion"></div>
+
     <h2>How this works</h2>
     <div class="type-item"><span class="type-dot" style="background:#c9973e"></span><div><b>New quote</b><span>A brand new quote, built from scratch. Add each component (hotel, activity, transfer, etc) so we have everything needed to price it in one pass.</span></div></div>
     <div class="type-item"><span class="type-dot" style="background:#b8860b"></span><div><b>Additional to existing quote/booking</b><span>Something to add to a quote or booking that already exists. Give the ORN or TAG reference so we find it instantly.</span></div></div>
@@ -188,15 +218,6 @@ textarea{min-height:80px;resize:vertical}
       <div><div class="lbl">Customer contact</div><a href="mailto:customereu@orn.com">customereu@orn.com</a></div>
       <div><div class="lbl">Escalations</div><a href="mailto:escalationseu@orn.com">escalationseu@orn.com</a></div>
     </div>
-
-    <h2>Our secured supplier access</h2>
-    <p>150 suppliers across 9 service categories — if it's not loaded in the system, we can very likely still quote it. Tap a category to see the full list.</p>
-    <div class="supplier-stats">
-      <div class="stat">150<small>Suppliers</small></div>
-      <div class="stat">9<small>Categories</small></div>
-      <div class="stat">24h<small>Missing-product SLA</small></div>
-    </div>
-    <div id="supplierAccordion"></div>
     <div class="guide-foot">ORN Europe · 17 Hanover Square, London W1S 1BN · supplier access secured by the ORN Europe office · confidential, internal &amp; trade use only</div>
   </div>
   </div>
@@ -220,6 +241,53 @@ try{
 }catch(e){ console.error(e); }
 
 // Same service list as the internal system, with friendlier labels for the public form.
+// Matches the SLA defaults set in the portal (Settings → Timer defaults) — this
+// is the public form's own copy so the countdown works even if it can't reach
+// Firestore for the live per-category override.
+const SLA_HOURS_DEFAULT = {new_quote:72, quote_addon:72, group_quote:72, support:24, customer:24, escalation:4, management:8};
+const CATEGORY_LABELS = {new_quote:'New quote', quote_addon:'Additional to existing quote/booking', group_quote:'Group tour quote', support:'Booking admin / operational', customer:'Customer contact / support', escalation:'Escalation', management:'Management escalation'};
+
+let countdownTimer = null;
+function startCountdown(deadlineMs){
+  const el = document.getElementById('okCountdown');
+  if (!el) return;
+  const byStr = new Date(deadlineMs).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+  function tick(){
+    const msLeft = deadlineMs - Date.now();
+    if (msLeft <= 0){
+      el.innerHTML = `<div class="lbl">Response target</div><div class="clock">Due now</div><div class="by">Expected by ${byStr}</div>`;
+      clearInterval(countdownTimer);
+      return;
+    }
+    const h = Math.floor(msLeft/3600000);
+    const m = Math.floor((msLeft%3600000)/60000);
+    const s = Math.floor((msLeft%60000)/1000);
+    const clockStr = h>0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+    el.innerHTML = `<div class="lbl">We'll be in touch within</div><div class="clock">${clockStr}</div><div class="by">Expected by ${byStr}</div>`;
+  }
+  tick();
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(tick, 1000);
+}
+
+// Acknowledgment email back to whoever submitted the form. Best-effort and
+// non-blocking — the in-page confirmation and countdown stand regardless of
+// whether this succeeds. Reuses the EmailJS config saved in the portal's
+// Settings (Quote request email alerts), read live from Firestore, so there's
+// nothing to configure separately here.
+function sendAcknowledgment({ref, name, toEmail, category, deadline}){
+  if (!FIRE || !window.emailjs) return;
+  DB.collection('recon_settings').doc('notify').get().then(d=>{
+    if (!d.exists) return;
+    const ej = (d.data()||{}).emailjs;
+    if (!ej || !ej.serviceId || !ej.ackTemplateId || !ej.publicKey) return;
+    const expectedBy = new Date(deadline).toLocaleString('en-GB', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
+    window.emailjs.send(ej.serviceId, ej.ackTemplateId, {
+      to_email: toEmail, client_name: name, ref, category, expected_by: expectedBy
+    }, ej.publicKey).catch(e=>console.error('Acknowledgment email failed', e));
+  }).catch(e=>console.error('Could not load notify settings for acknowledgment email', e));
+}
+
 const COMPONENT_TYPES = [
   ['HOTEL','Hotel'], ['TOUR','Activity / Tour'], ['TRANSPORT','Transfer'], ['TRAIN','Train'],
   ['FERRY','Ferry'], ['FLIGHT','Flight'], ['CRUISE','Cruise'], ['ENTRANCE TICKET','Entrance ticket'],
@@ -243,8 +311,8 @@ function renderSupplierAccordion(){
   const el = document.getElementById('supplierAccordion');
   if (!el) return;
   el.innerHTML = SUPPLIER_CATEGORIES.map((c,i)=>`
-    <div class="acc-item" id="acc_${i}">
-      <div class="acc-hd" onclick="toggleAcc(${i})"><span><span class="acc-arrow">▶</span>${c.name}</span><span class="cnt">${c.suppliers.length}</span></div>
+    <div class="acc-item${c.suppliers.length>20?' wide':''}" id="acc_${i}">
+      <div class="acc-hd" onclick="toggleAcc(${i})"><span class="acc-name"><span class="acc-arrow">▶</span>${c.name}</span><span class="cnt">${c.suppliers.length}</span></div>
       <div class="acc-body">${c.suppliers.join(' · ')}</div>
     </div>`).join('');
 }
@@ -309,7 +377,8 @@ function submitRequest(){
   if (replyEmail && !/\S+@\S+\.\S+/.test(replyEmail)){ err.textContent='Please enter a valid reply-to email address.'; return; }
 
   const ornRef = v('fOrnRef'), tagRef = v('fTagRef');
-  let payload = { category, name, email, phone: v('fPhone'), agency: v('fAgency'), replyEmail,
+  const urgency = v('fUrgency') || 'standard';
+  let payload = { category, name, email, phone: v('fPhone'), agency: v('fAgency'), replyEmail, urgency,
     ornRef, tagRef, bookingRef: v('fBookingRefO'), specialNotes: message, message };
 
   const isQuoteType = category==='new_quote' || category==='quote_addon' || category==='group_quote';
@@ -357,6 +426,11 @@ function submitRequest(){
     document.getElementById('okRef').textContent = ref;
     document.getElementById('okEmail').textContent = replyEmail || email;
     document.getElementById('okCard').style.display='block';
+    const catLabel = (CATEGORY_LABELS[category]||category);
+    const slaHours = SLA_HOURS_DEFAULT[category] || 24;
+    const deadline = Date.now() + slaHours*3600*1000;
+    startCountdown(deadline);
+    sendAcknowledgment({ref, name, toEmail: replyEmail||email, category: catLabel, deadline});
   }).catch(e=>{
     console.error(e);
     btn.disabled=false; btn.textContent='Submit request';

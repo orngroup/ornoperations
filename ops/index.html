@@ -4898,8 +4898,11 @@ function renderSettings(){
         <div class="section-lbl">Quote request email alerts (EmailJS)</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           <input id="ejService" style="flex:1;min-width:180px" placeholder="EmailJS Service ID" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.serviceId)||'')}" ${isAdmin?'':'disabled'}>
-          <input id="ejTemplate" style="flex:1;min-width:180px" placeholder="EmailJS Template ID" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.templateId)||'')}" ${isAdmin?'':'disabled'}>
+          <input id="ejTemplate" style="flex:1;min-width:180px" placeholder="EmailJS Template ID (team alert)" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.templateId)||'')}" ${isAdmin?'':'disabled'}>
           <input id="ejPublic" style="flex:1;min-width:180px" placeholder="EmailJS Public Key" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.publicKey)||'')}" ${isAdmin?'':'disabled'}>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <input id="ejAckTemplate" style="flex:1;min-width:260px" placeholder="EmailJS Template ID (submitter acknowledgment)" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.ackTemplateId)||'')}" ${isAdmin?'':'disabled'}>
         </div>
         <div class="hint" style="margin-bottom:6px">Routing inboxes — one per request type, per Lisa's email. Escalations always also go to Ken &amp; Ajay directly.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -4910,7 +4913,7 @@ function renderSettings(){
           ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span style="display:flex;align-items:center;gap:4px;min-width:140px"><input id="catSla_${k}" type="number" min="1" style="width:60px" value="${esc(categorySlaHours(k))}" ${isAdmin?'':'disabled'}><span class="hint" style="margin:0">h ${esc(c.short)}</span></span>`).join('')}
           ${isAdmin?`<button class="btn small" onclick="saveEmailJs()">Save</button>`:''}
         </div>
-        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service and a template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>, then paste the three IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email.</div>
+        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service, and two templates: a <b>team alert</b> template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>; and an <b>acknowledgment</b> template (sent back to whoever submitted the form) with variables <code>to_email, client_name, ref, category, expected_by</code>. Paste the service ID, public key and both template IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email either way.</div>
         <div class="section-lbl">Email client (this device)</div>
         <select onchange="localStorage.setItem('ornrecon_mailclient', this.value);">
           ${[['','Not set - ask me next time'],['outlook','Outlook (desktop app)'],['outlookweb','Outlook on the web'],['gmail','Gmail (web)'],['applemail','Apple Mail / system default'],['copy','Other webmail - copy to clipboard']].map(([v,l])=>`<option value="${v}" ${(localStorage.getItem('ornrecon_mailclient')||'')===v?'selected':''}>${l}</option>`).join('')}
@@ -5023,9 +5026,10 @@ function saveGuestWebhook(){
 function saveEmailJs(){
   const serviceId = (document.getElementById('ejService')||{}).value?.trim() || '';
   const templateId = (document.getElementById('ejTemplate')||{}).value?.trim() || '';
+  const ackTemplateId = (document.getElementById('ejAckTemplate')||{}).value?.trim() || '';
   const publicKey = (document.getElementById('ejPublic')||{}).value?.trim() || '';
   state.notify = state.notify || {};
-  state.notify.emailjs = {serviceId, templateId, publicKey};
+  state.notify.emailjs = {serviceId, templateId, ackTemplateId, publicKey};
   const categoryEmails = {};
   const categorySla = {};
   Object.keys(REQUEST_CATEGORIES).forEach(k=>{
