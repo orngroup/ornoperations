@@ -116,11 +116,16 @@ textarea{min-height:80px;resize:vertical}
 .type-dot{width:9px;height:9px;border-radius:50%;margin-top:5px;flex-shrink:0}
 .type-item b{display:block;font-size:12.5px;color:#1d2433}
 .type-item span{display:block;font-size:11.5px;color:#5f6880;line-height:1.5;margin-top:1px}
-.sla-table{background:#fff;border-radius:10px;padding:16px 20px;margin-bottom:16px}
-.sla-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eceff4;font-size:12.5px}
-.sla-row:last-child{border-bottom:none}
-.sla-row b{color:#1d2433}
-.sla-row .hrs{color:#c8102e;font-weight:800}
+.sla-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.sla-card{background:#fff;border-radius:12px;padding:16px 18px;border-top:4px solid #c8102e}
+.sla-card .hrs{font-size:22px;font-weight:800;color:#c8102e}
+.sla-card .name{font-size:12.5px;font-weight:700;color:#1d2433;margin:4px 0 8px}
+.sla-card .ex{font-size:11px;color:#5f6880;line-height:1.6;background:#f4f6fa;border-radius:6px;padding:8px 10px}
+.sla-card .ex b{color:#1d2433}
+.org-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.org-card{background:#fff;border-radius:10px;padding:16px 18px}
+.org-card b{display:block;font-size:13px;color:#c8102e;margin-bottom:6px}
+.org-card span{font-size:11.5px;color:#5f6880;line-height:1.6}
 .contact-links{display:flex;flex-wrap:wrap;gap:10px}
 .contact-links .item{background:#fff;border-radius:8px;padding:10px 14px;flex:1;min-width:200px}
 .contact-links .lbl{color:#9aa2b5;font-weight:400;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
@@ -276,16 +281,19 @@ textarea{min-height:80px;resize:vertical}
     </div>
 
     <div class="section-title">Proposed SLA — informed by our time-zone coverage</div>
-    <div class="section-sub" style="max-width:820px">With offices in Seattle, the UK and Melbourne each working standard business hours, requests are covered for roughly 23 of 24 hours in relay — Melbourne's day ends as the UK's begins, and the UK's day overlaps Seattle's morning. The only real gap is a narrow window in the UK's early morning (broadly 7–9am GMT, shifting slightly with daylight saving on each side). On that basis:</div>
-    <div class="sla-table">
-      <div class="sla-row"><b>Standard response</b><span class="hrs">48 hours</span></div>
-      <div class="sla-row"><b>Urgent (flagged on the form)</b><span class="hrs">24 hours</span></div>
-      <div class="sla-row"><b>Escalation</b><span class="hrs">Immediate</span></div>
-      <div class="sla-row"><b>Management escalation</b><span class="hrs">Same day (8h)</span></div>
-    </div>
-    <div class="section-sub" style="max-width:820px;margin-bottom:26px">This is a suggestion for review, not yet policy — Lisa's original guidance (72h quotes / 24h queries) still stands until confirmed otherwise. Reach out to Ajay if the team wants to adopt these figures.</div>
+    <div class="section-sub" style="max-width:820px">With offices in Seattle, the UK and Melbourne each working standard business hours, requests are covered for roughly 23 of 24 hours in relay — Melbourne's day ends as the UK's begins, and the UK's day overlaps Seattle's morning. The only real gap is a narrow window in the UK's early morning (broadly 7–9am GMT, shifting slightly with daylight saving on each side). <b style="color:#fff">All targets below are subject to that coverage</b> — a request landing right in the gap, or late on a Friday before a weekend, starts its clock from when an office actually opens, not the exact submission time.</div>
+    <div class="sla-cards" id="slaCards"></div>
+    <div class="section-sub" style="max-width:820px;margin:16px 0 26px">This is a suggestion for review, not yet policy — Lisa's original guidance (72h quotes / 24h queries) still stands until confirmed otherwise. Reach out to Ajay if the team wants to adopt these figures.</div>
 
-    <div class="section-title">How this works — request types</div>
+    <div class="section-title">Who does what</div>
+    <div class="section-sub" style="max-width:820px">The three offices split responsibility as follows:</div>
+    <div class="org-grid">
+      <div class="org-card"><b>ORN EU</b><span>Europe delivery — quotes, bookings, and the delivery quality control for the region: making sure what's promised in a quote is what actually gets confirmed and delivered on the ground.</span></div>
+      <div class="org-card"><b>ORN India</b><span>Nexus updates — day-to-day system loading and updates in Nexus, keeping product and booking data current.</span></div>
+      <div class="org-card"><b>ORN Australia</b><span>Res, etc — reservations and related operational functions for the Australia desk.</span></div>
+    </div>
+
+    <div class="section-title" style="margin-top:26px">How this works — request types</div>
     <div class="type-item"><span class="type-dot" style="background:#c9973e"></span><div><b>New quote</b><span>A brand new quote, built from scratch. Add each component (hotel, activity, transfer, etc) so we have everything needed to price it in one pass.</span></div></div>
     <div class="type-item"><span class="type-dot" style="background:#b8860b"></span><div><b>Additional to existing quote/booking</b><span>Something to add to a quote or booking that already exists. Give the ORN or TAG reference so we find it instantly.</span></div></div>
     <div class="type-item"><span class="type-dot" style="background:#8a6d1a"></span><div><b>Group tour quote</b><span>A quote for a group — same component builder, just enter group size instead of individual pax/child ages.</span></div></div>
@@ -460,10 +468,45 @@ function renderFleet(){
 }
 renderFleet();
 
-/* ============== SLA DEFAULTS (48h standard / 24h urgent, per Ajay's Aug 2026 review) ============== */
+/* ============== SLA DEFAULTS (per Ajay's Aug 2026 review) ==============
+   Standard: 48h. Urgent (flagged): 24h — overrides everything else.
+   Long-lead: 72h for quote-type requests where travel is more than 60 days
+   out — there's no rush to quote something that far away, so it drops to a
+   more relaxed target rather than sitting on the same clock as a near-term one.
+   Escalation/management escalation are unaffected by date or urgency flag. */
 const SLA_HOURS_DEFAULT = {new_quote:48, quote_addon:48, group_quote:48, support:48, customer:48, escalation:4, management:8};
 const SLA_HOURS_URGENT = 24;
+const SLA_HOURS_LONG_LEAD = 72;
+const LONG_LEAD_DAYS = 60;
+const QUOTE_TYPE_CATEGORIES = ['new_quote','quote_addon','group_quote'];
+function computeSlaHours(category, urgency, departureDate){
+  if (urgency==='urgent') return SLA_HOURS_URGENT;
+  if (QUOTE_TYPE_CATEGORIES.includes(category) && departureDate){
+    const days = Math.round((new Date(departureDate) - new Date()) / 86400000);
+    if (days > LONG_LEAD_DAYS) return SLA_HOURS_LONG_LEAD;
+  }
+  return SLA_HOURS_DEFAULT[category] || 48;
+}
 const CATEGORY_LABELS = {new_quote:'New quote', quote_addon:'Additional to existing quote/booking', group_quote:'Group tour quote', support:'Booking admin / operational', customer:'Customer contact / support', escalation:'Escalation', management:'Management escalation'};
+
+const SLA_TIERS = [
+  {hrs:"48h", name:"Standard", example:"<b>Example:</b> a new quote submitted Monday morning for a client travelling in 6 weeks — response by Wednesday morning."},
+  {hrs:"72h", name:"Long-lead (travel 60+ days out)", example:"<b>Example:</b> a new quote for a group travelling in 5 months, submitted Friday — response by Monday, since there's no rush with that much lead time."},
+  {hrs:"24h", name:"Urgent (flagged on the form)", example:"<b>Example:</b> an add-on quote for a client travelling in 10 days, marked Urgent — response within a day even though it would otherwise be Standard."},
+  {hrs:"Immediate", name:"Escalation", example:"<b>Example:</b> a supplier has cancelled a confirmed transfer the day before travel — goes straight to Ken and Ajay as well as the escalations inbox."},
+  {hrs:"8h", name:"Management escalation (same day)", example:"<b>Example:</b> a recurring issue with one supplier across several bookings that needs a decision on whether to keep using them — explained in full, goes to Ken and Ajay."}
+];
+function renderSlaCards(){
+  const el = document.getElementById('slaCards');
+  if (!el) return;
+  el.innerHTML = SLA_TIERS.map(t=>`
+    <div class="sla-card">
+      <div class="hrs">${t.hrs}</div>
+      <div class="name">${t.name}</div>
+      <div class="ex">${t.example}</div>
+    </div>`).join('');
+}
+renderSlaCards();
 
 /* ============== COMPONENT BUILDER ============== */
 const COMPONENT_TYPES = [
@@ -613,8 +656,7 @@ function submitRequest(){
     document.getElementById('okEmail').textContent = replyEmail || email;
     document.getElementById('okCard').style.display='block';
     const catLabel = (CATEGORY_LABELS[category]||category);
-    const baseHours = SLA_HOURS_DEFAULT[category] || 48;
-    const slaHours = urgency==='urgent' ? Math.min(baseHours, SLA_HOURS_URGENT) : baseHours;
+    const slaHours = computeSlaHours(category, urgency, payload.departureDate);
     const deadline = Date.now() + slaHours*3600*1000;
     startCountdown(deadline);
     sendAcknowledgment({ref, name, toEmail: replyEmail||email, category: catLabel, deadline});

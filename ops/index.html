@@ -849,11 +849,11 @@ function tband(b){
 /* Four request categories per Lisa's routing email — each maps to a dedicated
    inbox address (default per her email, editable in Settings). */
 const REQUEST_CATEGORIES = {
-  new_quote:   {label:'New quote',                    short:'New quote',        color:'var(--gold)',    defaultEmail:'quoteseu@orn.com',      slaHours:72},
-  quote_addon: {label:'Additional to existing quote/booking', short:'Add-on quote', color:'#c9973e',      defaultEmail:'quoteseu@orn.com',      slaHours:72},
-  group_quote: {label:'Group tour quote',             short:'Group quote',      color:'#b8860b',         defaultEmail:'quoteseu@orn.com',      slaHours:72},
-  support:    {label:'Booking admin / operational',short:'Booking admin',    color:'var(--muted)',   defaultEmail:'supporteu@orn.com',     slaHours:24},
-  customer:   {label:'Customer contact / support', short:'Customer',         color:'#5b8def',         defaultEmail:'customereu@orn.com',    slaHours:24},
+  new_quote:   {label:'New quote',                    short:'New quote',        color:'var(--gold)',    defaultEmail:'quoteseu@orn.com',      slaHours:48},
+  quote_addon: {label:'Additional to existing quote/booking', short:'Add-on quote', color:'#c9973e',      defaultEmail:'quoteseu@orn.com',      slaHours:48},
+  group_quote: {label:'Group tour quote',             short:'Group quote',      color:'#b8860b',         defaultEmail:'quoteseu@orn.com',      slaHours:48},
+  support:    {label:'Booking admin / operational',short:'Booking admin',    color:'var(--muted)',   defaultEmail:'supporteu@orn.com',     slaHours:48},
+  customer:   {label:'Customer contact / support', short:'Customer',         color:'#5b8def',         defaultEmail:'customereu@orn.com',    slaHours:48},
   escalation: {label:'Escalation',                 short:'Escalation',       color:'var(--danger)',  defaultEmail:'escalationseu@orn.com', slaHours:4},
   management: {label:'Management escalation',      short:'Mgmt escalation',  color:'#8b1a3f',         defaultEmail:'escalationseu@orn.com', slaHours:8}
 };
@@ -875,8 +875,18 @@ function categorySlaHours(cat){
   const v = cfg[key];
   return (v!=null && v!=='') ? Number(v) : (categoryMeta(cat).slaHours ?? 24);
 }
+/* Effective SLA for one request: an explicit override wins outright; otherwise
+   urgency flagged on the form drops it to 24h; otherwise a quote-type request
+   travelling 60+ days out relaxes to 72h (no rush that far ahead); otherwise
+   the category default (48h standard / 4h escalation / 8h management) applies. */
 function requestSlaHours(q){
-  return (q.slaOverrideHours!=null && q.slaOverrideHours!=='') ? Number(q.slaOverrideHours) : categorySlaHours(q.category||'quote');
+  if (q.slaOverrideHours!=null && q.slaOverrideHours!=='') return Number(q.slaOverrideHours);
+  if (q.urgency==='urgent') return 24;
+  if (isQuoteType(q.category) && q.departureDate){
+    const days = daysTo(q.departureDate);
+    if (days!=null && days > 60) return 72;
+  }
+  return categorySlaHours(q.category||'quote');
 }
 function requestDeadlineMs(q){
   const start = q.ts ? new Date(q.ts).getTime() : Date.now();
