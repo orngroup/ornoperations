@@ -2827,7 +2827,7 @@ function renderQuotes(){
     </div>
     <div class="hint" style="margin-bottom:10px">Share the request form link with clients/agents/Sales Support instead of email — they pick the request type, it lands here sorted by urgency, and alerts the right inbox (${Object.values(REQUEST_CATEGORIES).map(c=>c.defaultEmail).join(' · ')}). Timer defaults: Quote & loading 72h, Booking admin/Customer 24h, Escalation 4h, Mgmt escalation 8h — edit defaults in Settings, or override per request below.</div>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Type</th><th>Time left</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Itinerary</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
+      <thead><tr><th>Type</th><th>Time left</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Message to client</th><th>Itinerary</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
       <tbody>${rows.map(q=>{
         const rc = receiptFor(q.id);
         const cat = categoryMeta(q.category);
@@ -2843,6 +2843,8 @@ function renderQuotes(){
         <td><input value="${esc(q.tagRef||q.bookingRef||'')}" placeholder="TAG..." onchange="editQuote('${q.id}','tagRef',this.value)" style="min-width:100px"></td>
         <td><input value="${esc(q.specialNotes||'')}" placeholder="Special notes" onchange="editQuote('${q.id}','specialNotes',this.value)" style="min-width:140px"></td>
         <td><select onchange="editQuote('${q.id}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+        <td><textarea placeholder="Visible to the client on their tracking page — e.g. 'Sourcing your car rental, will confirm by Thursday'" onchange="editQuote('${q.id}','clientUpdate',this.value)" style="min-width:160px;min-height:44px;font-size:12px">${esc(q.clientUpdate||'')}</textarea>
+          <button class="btn ghost small" style="margin-top:4px" onclick="copyTrackingLink('${esc(q.ref||q.id)}')">Copy tracking link</button></td>
         <td><button class="btn ghost small" onclick="openQuoteItinerary('${q.id}')">Itinerary (${(q.components||[]).length})</button>
           ${q.bookingId? `<button class="btn ghost small" onclick="openBooking('${esc(q.bookingId)}')">Open ${esc(q.bookingId)}</button>` : `<button class="btn ghost small" onclick="convertQuoteToBooking('${q.id}')">→ Booking</button>`}</td>
         <td>${rc
@@ -2851,7 +2853,7 @@ function renderQuotes(){
           <button class="btn ghost small" onclick="printQuotePdf('${q.id}')">PDF</button></td>
         <td><input value="${esc(q.internalNotes||'')}" placeholder="Internal notes" onchange="editQuote('${q.id}','internalNotes',this.value)" style="min-width:130px"></td>
         <td><button class="btn danger small" onclick="delQuote('${q.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="15" class="empty">No requests in this category yet.</td></tr>'}</tbody>
+      </tr>`;}).join('') || '<tr><td colspan="16" class="empty">No requests in this category yet.</td></tr>'}</tbody>
     </table></div>
     <div id="quoteItinerary"></div>`;
   renderQuoteItinerary();
@@ -2860,6 +2862,10 @@ function editQuote(id, f, v){
   const q = state.quotes.find(x=>x.id===id); if (!q) return;
   q[f]=v; saveListItem('quotes', q);
   logActivity(q.name||'-', 'Quote request '+f+' → '+String(v).slice(0,40));
+}
+function copyTrackingLink(ref){
+  const url = 'https://orngroup.github.io/ornoperations/quote-request/track/?ref='+encodeURIComponent(ref);
+  navigator.clipboard.writeText(url).then(()=>toast('Tracking link copied')).catch(()=>alert(url));
 }
 function delQuote(id){
   if (!confirm('Delete this quote request? Its uploaded quote doc (if any) will also be removed.')) return;
@@ -4923,7 +4929,7 @@ function renderSettings(){
           ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span style="display:flex;align-items:center;gap:4px;min-width:140px"><input id="catSla_${k}" type="number" min="1" style="width:60px" value="${esc(categorySlaHours(k))}" ${isAdmin?'':'disabled'}><span class="hint" style="margin:0">h ${esc(c.short)}</span></span>`).join('')}
           ${isAdmin?`<button class="btn small" onclick="saveEmailJs()">Save</button>`:''}
         </div>
-        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service, and two templates: a <b>team alert</b> template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>; and an <b>acknowledgment</b> template (sent back to whoever submitted the form) with variables <code>to_email, client_name, ref, category, expected_by</code>. Paste the service ID, public key and both template IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email either way.</div>
+        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service, and two templates: a <b>team alert</b> template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>; and an <b>acknowledgment</b> template (sent back to whoever submitted the form) with variables <code>to_email, client_name, ref, category, expected_by, track_url</code> — add <code>{{track_url}}</code> as a link in the template so they can check status any time without emailing back. Paste the service ID, public key and both template IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email either way.</div>
         <div class="section-lbl">Email client (this device)</div>
         <select onchange="localStorage.setItem('ornrecon_mailclient', this.value);">
           ${[['','Not set - ask me next time'],['outlook','Outlook (desktop app)'],['outlookweb','Outlook on the web'],['gmail','Gmail (web)'],['applemail','Apple Mail / system default'],['copy','Other webmail - copy to clipboard']].map(([v,l])=>`<option value="${v}" ${(localStorage.getItem('ornrecon_mailclient')||'')===v?'selected':''}>${l}</option>`).join('')}

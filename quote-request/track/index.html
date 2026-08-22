@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORN Europe — Track Your Request</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;color:#1d2433;
+  background:linear-gradient(160deg,#0b0d12 0%,#1a2233 55%,#2d4468 100%);
+  display:flex;align-items:flex-start;justify-content:center;padding:40px 16px}
+.wrap{width:min(560px,100%)}
+.brand-bar{background:#c8102e;border-radius:14px 14px 0 0;padding:16px 26px}
+.brand-bar .orn{color:#fff;font-weight:800;font-size:20px;letter-spacing:4px}
+.brand-bar .sub{color:#ffe3e3;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;opacity:.9;margin-top:2px}
+.card{background:#fff;border-radius:0 0 14px 14px;padding:30px 32px;box-shadow:0 20px 54px rgba(4,7,13,.5)}
+h1{font-size:19px;font-weight:800;margin-bottom:4px}
+.lead{color:#5f6880;font-size:12.5px;margin-bottom:18px}
+label{display:block;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#5f6880;font-weight:700;margin-bottom:6px}
+input{width:100%;font-family:inherit;font-size:14px;border:1px solid #d5dae3;border-radius:8px;padding:11px 13px;outline:none}
+input:focus{border-color:#c8102e}
+.btn{margin-top:14px;width:100%;background:#c8102e;color:#fff;border:none;border-radius:8px;padding:13px;font-weight:800;font-size:14px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:wait}
+.err{color:#c8102e;font-size:12.5px;min-height:16px;margin-top:8px}
+.hidden{display:none !important}
+.result{margin-top:22px;border-top:1px solid #eceff4;padding-top:20px}
+.status-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-weight:800;font-size:12.5px;color:#fff;margin-bottom:14px}
+.field{margin-bottom:14px}
+.field .l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#9aa2b5;font-weight:700}
+.field .v{font-size:14px;color:#1d2433;margin-top:2px}
+.update-box{background:#f4f6fa;border-left:3px solid #c8102e;border-radius:6px;padding:12px 14px;margin-top:4px;font-size:13px;color:#1d2433;line-height:1.6}
+.no-update{color:#9aa2b5;font-style:italic;font-size:12.5px}
+.hint{color:#9aa2b5;font-size:11px;margin-top:18px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand-bar"><div class="orn">ORN</div><div class="sub">Europe · Track Your Request</div></div>
+  <div class="card">
+    <h1>Track your request</h1>
+    <div class="lead">Enter the reference you were given when you submitted your request.</div>
+    <label>Reference</label>
+    <input id="fRef" placeholder="e.g. QT-4F8K2X">
+    <button class="btn" id="fSubmit" onclick="lookup()">Check status</button>
+    <div class="err" id="fErr"></div>
+
+    <div class="result hidden" id="result">
+      <span class="status-badge" id="statusBadge"></span>
+      <div class="field"><div class="l">Request type</div><div class="v" id="rCategory"></div></div>
+      <div class="field"><div class="l">Submitted</div><div class="v" id="rSubmitted"></div></div>
+      <div class="field" id="rDepartureField"><div class="l">Travel date</div><div class="v" id="rDeparture"></div></div>
+      <div class="field"><div class="l">Latest update from the team</div>
+        <div class="update-box" id="rUpdate"></div>
+      </div>
+    </div>
+    <div class="hint">This page only shows status and any update the team has left for you — no pricing or internal details.</div>
+  </div>
+</div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyALzMtGRDrQyJOC-KbtqvCPgo1NBQ6Vdpc",
+  authDomain: "orn-operations.firebaseapp.com",
+  projectId: "orn-operations",
+  storageBucket: "orn-operations.firebasestorage.app",
+  messagingSenderId: "470679786970",
+  appId: "1:470679786970:web:28945392beb13b9a2d5ce3"
+};
+let DB=null, FIRE=false;
+try{
+  if (typeof firebase !== 'undefined' && firebase && firebase.initializeApp){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    DB = firebase.firestore(); FIRE = true;
+  }
+}catch(e){ console.error(e); }
+
+const CATEGORY_LABELS = {quote:'New quote', new_quote:'New quote', quote_addon:'Additional to existing quote/booking', group_quote:'Group tour quote', support:'Booking admin / operational', customer:'Customer contact / support', escalation:'Escalation', management:'Management escalation'};
+const STATUS_COLORS = {New:'#5f6880', Working:'#c9973e', Quoted:'#5b8def', Sent:'#2c9e51', Won:'#2c9e51', Lost:'#9aa2b5'};
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// This lookup is READ-ONLY — it never writes, updates, or deletes anything.
+function lookup(){
+  const err = document.getElementById('fErr');
+  err.textContent = '';
+  document.getElementById('result').classList.add('hidden');
+  const ref = document.getElementById('fRef').value.trim();
+  if (!ref){ err.textContent = 'Please enter your reference.'; return; }
+  if (!FIRE){ err.textContent = 'Cannot reach the ORN system right now — please try again shortly.'; return; }
+
+  const btn = document.getElementById('fSubmit');
+  btn.disabled = true; btn.textContent = 'Checking…';
+
+  DB.collection('recon_quotes').where('ref', '==', ref).limit(1).get().then(snap=>{
+    btn.disabled = false; btn.textContent = 'Check status';
+    if (snap.empty){
+      err.textContent = "We couldn't find a request with that reference. Please check it and try again.";
+      return;
+    }
+    const q = snap.docs[0].data();
+    renderResult(q);
+  }).catch(e=>{
+    console.error(e);
+    btn.disabled = false; btn.textContent = 'Check status';
+    err.textContent = 'Something went wrong looking that up — please try again.';
+  });
+}
+
+function renderResult(q){
+  const status = q.status || 'New';
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = status;
+  badge.style.background = STATUS_COLORS[status] || '#5f6880';
+
+  document.getElementById('rCategory').textContent = CATEGORY_LABELS[q.category] || q.category || '—';
+  document.getElementById('rSubmitted').textContent = q.ts ? new Date(q.ts).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+
+  const depField = document.getElementById('rDepartureField');
+  if (q.departureDate){
+    depField.classList.remove('hidden');
+    document.getElementById('rDeparture').textContent = new Date(q.departureDate).toLocaleDateString('en-GB', {day:'numeric', month:'long', year:'numeric'});
+  } else {
+    depField.classList.add('hidden');
+  }
+
+  const updateEl = document.getElementById('rUpdate');
+  if (q.clientUpdate && q.clientUpdate.trim()){
+    updateEl.textContent = q.clientUpdate;
+    updateEl.classList.remove('no-update');
+  } else {
+    updateEl.innerHTML = '<span class="no-update">No update posted yet — the team will add one here as your request progresses.</span>';
+  }
+
+  document.getElementById('result').classList.remove('hidden');
+}
+
+// Support deep-linking from the acknowledgment email, e.g. ?ref=QT-4F8K2X
+(function(){
+  const params = new URLSearchParams(location.search);
+  const ref = params.get('ref');
+  if (ref){
+    document.getElementById('fRef').value = ref;
+    lookup();
+  }
+})();
+</script>
+</body>
+</html>

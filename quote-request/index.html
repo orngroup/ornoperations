@@ -239,6 +239,7 @@ textarea{min-height:80px;resize:vertical}
       <div class="ref" id="okRef"></div>
       <p>The Europe team has it now and will come back to you at <b id="okEmail"></b>.</p>
       <div class="countdown" id="okCountdown"></div>
+      <div class="hint" style="margin-top:0"><a id="okTrackLink" href="#" style="color:#c8102e;font-weight:700">Bookmark this link to check your status any time →</a></div>
       <button class="btn wide" onclick="location.reload()">Submit another request</button>
     </div>
   </div>
@@ -580,6 +581,9 @@ function startCountdown(deadlineMs){
 }
 
 /* ============== ACKNOWLEDGMENT EMAIL ============== */
+function trackingUrl(ref){
+  return 'https://orngroup.github.io/ornoperations/quote-request/track/?ref='+encodeURIComponent(ref);
+}
 function sendAcknowledgment({ref, name, toEmail, category, deadline}){
   if (!FIRE || !window.emailjs) return;
   DB.collection('recon_settings').doc('notify').get().then(d=>{
@@ -588,7 +592,7 @@ function sendAcknowledgment({ref, name, toEmail, category, deadline}){
     if (!ej || !ej.serviceId || !ej.ackTemplateId || !ej.publicKey) return;
     const expectedBy = new Date(deadline).toLocaleString('en-GB', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
     window.emailjs.send(ej.serviceId, ej.ackTemplateId, {
-      to_email: toEmail, client_name: name, ref, category, expected_by: expectedBy
+      to_email: toEmail, client_name: name, ref, category, expected_by: expectedBy, track_url: trackingUrl(ref)
     }, ej.publicKey).catch(e=>console.error('Acknowledgment email failed', e));
   }).catch(e=>console.error('Could not load notify settings for acknowledgment email', e));
 }
@@ -655,6 +659,8 @@ function submitRequest(){
     document.getElementById('okRef').textContent = ref;
     document.getElementById('okEmail').textContent = replyEmail || email;
     document.getElementById('okCard').style.display='block';
+    const okLink = document.getElementById('okTrackLink');
+    if (okLink) okLink.href = trackingUrl(ref);
     const catLabel = (CATEGORY_LABELS[category]||category);
     const slaHours = computeSlaHours(category, urgency, payload.departureDate);
     const deadline = Date.now() + slaHours*3600*1000;
