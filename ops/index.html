@@ -193,11 +193,16 @@ table.bk td input:focus, table.bk td select:focus{border-color:var(--gold);backg
 .support-banner .sb-box .l{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;font-weight:700;opacity:.9}
 .support-banner .sb-urgent{background:#fff;color:#cc3a24;font-weight:800;font-size:11px;letter-spacing:.6px;text-transform:uppercase;padding:6px 14px;border-radius:20px}
 .support-banner .sb-latest{font-size:12.5px;opacity:.95;max-width:340px}
-.clock-strip{display:flex;gap:10px;margin-bottom:20px}
-.clock-strip-item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 16px;flex:1;text-align:center}
-.clock-strip-item .c-city{display:block;font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--faint);font-weight:700}
-.clock-strip-item .c-time{display:block;font-size:15px;font-weight:800;color:var(--text);margin-top:2px;font-variant-numeric:tabular-nums}
-.support-banner .sb-go{margin-left:auto;font-weight:800;white-space:nowrap;font-size:13.5px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:8px 14px}
+.clock-strip{display:flex;gap:12px;margin-bottom:20px}
+.clock-strip-item{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--accent, var(--gold));border-radius:12px;padding:14px 20px;flex:1;position:relative;overflow:hidden}
+.clock-strip-item::after{content:'';position:absolute;top:-30px;right:-30px;width:80px;height:80px;border-radius:50%;background:var(--accent, var(--gold));opacity:.06}
+.clock-strip-item .c-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.clock-strip-item .c-live{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:clockPulse 1.6s ease-in-out infinite}
+@keyframes clockPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+.clock-strip-item .c-city{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--faint);font-weight:700}
+.clock-strip-item .c-time{font-size:24px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.15;position:relative}
+.clock-strip-item .c-date{font-size:10.5px;color:var(--faint);margin-top:2px;position:relative}
+.support-banner .sb-go{margin-left:auto;font-weight:800;white-space:nowrap;font-size:13.5px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:8px 14px;cursor:pointer}
 
 
 .fhero{display:grid;grid-template-columns:1.1fr 1fr;gap:0;border-radius:14px;overflow:hidden;background:#12100d;color:#fff;margin-bottom:18px;min-height:250px}
@@ -1163,11 +1168,17 @@ function renderAll(){ renderSidebar(); renderDashboard(); renderBookings(); rend
 /* ================= DASHBOARD ================= */
 let opsClockTimer = null;
 function updateOpsClocks(){
-  const zones = [['opsClockSeattle','America/Los_Angeles'],['opsClockUK','Europe/London'],['opsClockMelbourne','Australia/Melbourne']];
-  zones.forEach(([id,tz])=>{
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = new Date().toLocaleTimeString('en-GB', {timeZone:tz, hour:'2-digit', minute:'2-digit'});
+  const zones = [
+    ['opsClockSeattle','opsDateSeattle','America/Los_Angeles'],
+    ['opsClockUK','opsDateUK','Europe/London'],
+    ['opsClockMelbourne','opsDateMelbourne','Australia/Melbourne']
+  ];
+  const now = new Date();
+  zones.forEach(([timeId,dateId,tz])=>{
+    const timeEl = document.getElementById(timeId), dateEl = document.getElementById(dateId);
+    if (!timeEl) return;
+    timeEl.textContent = now.toLocaleTimeString('en-GB', {timeZone:tz, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    if (dateEl) dateEl.textContent = now.toLocaleDateString('en-GB', {timeZone:tz, weekday:'short', day:'numeric', month:'short'});
   });
 }
 function renderDashboard(){
@@ -1231,31 +1242,6 @@ function renderDashboard(){
     </div>
 
     ${(()=>{
-      const total = state.tickets.length;
-      const openT = state.tickets.filter(t=>t.status==='Open');
-      const progT = state.tickets.filter(t=>t.status==='In progress');
-      const doneT = state.tickets.filter(t=>t.status==='Resolved');
-      const urgent = openT.filter(t=>/urgent/i.test(t.priority||''));
-      const latest = openT.concat(progT).sort((a,z)=>(z.ts||'').localeCompare(a.ts||''))[0];
-      return `<div class="support-banner ${openT.length?'has-open':''}" onclick="switchView('messages')" title="Open the Messages queue">
-        <span>
-          <div class="sb-title">${openT.length? '📨 Support messages — action needed' : '📨 Support messages — all clear'}</div>
-          <div class="sb-sub">Requests from TAG USA &amp; ORN Australia · www.orneurope.com/support</div>
-          ${latest? `<div class="sb-latest">Latest: <b>${esc((latest.subject||'').slice(0,44))}</b> — ${esc(latest.name||'')} (${esc(latest.office||'')})</div>`:''}
-        </span>
-        <span class="sb-stats">
-          <span class="sb-box"><div class="n">${total}</div><div class="l">Received</div></span>
-          <span class="sb-box"><div class="n">${openT.length}</div><div class="l">Pending</div></span>
-          <span class="sb-box"><div class="n">${progT.length}</div><div class="l">In progress</div></span>
-          <span class="sb-box"><div class="n">${doneT.length}</div><div class="l">Resolved</div></span>
-        </span>
-        ${urgent.length? `<span class="sb-urgent">⚠ ${urgent.length} urgent — guest travelling</span>`:''}
-        ${(state.notify&&state.notify.supportChannelUrl)?`<a class="sb-go" style="text-decoration:none" href="${esc(state.notify.supportChannelUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Slack ↗</a>`:''}
-        <span class="sb-go">Open queue →</span>
-      </div>`;
-    })()}
-
-    ${(()=>{
       const quoteCats = ['new_quote','quote_addon','group_quote'];
       const norm = q => q.category==='quote' ? 'new_quote' : (q.category||'new_quote');
       const salesOpen = state.quotes.filter(q=>quoteCats.includes(norm(q)) && q.status!=='Won' && q.status!=='Lost');
@@ -1276,28 +1262,62 @@ function renderDashboard(){
     })()}
 
     ${(()=>{
+      // Two genuinely separate systems shown as one banner: "Messages" (state.tickets,
+      // the older queue for TAG USA/ORN Australia via /support/) and "Tickets"
+      // (state.quotes, the newer Requests form). Neither dataset is touched or
+      // merged — this only combines how they're displayed.
+      const openM = state.tickets.filter(t=>t.status==='Open');
+      const progM = state.tickets.filter(t=>t.status==='In progress');
+      const doneM = state.tickets.filter(t=>t.status==='Resolved');
+      const urgentM = openM.filter(t=>/urgent/i.test(t.priority||''));
+      const latestM = openM.concat(progM).sort((a,z)=>(z.ts||'').localeCompare(a.ts||''))[0];
+
       const ticketCats = ['support','customer','escalation','management'];
       const norm = q => q.category==='quote' ? 'new_quote' : (q.category||'new_quote');
       const ticketsOpen = state.quotes.filter(q=>ticketCats.includes(norm(q)) && q.status!=='Won' && q.status!=='Lost');
       const esc2 = q=>['escalation','management'].includes(norm(q));
       const latestTicket = state.quotes.filter(q=>ticketCats.includes(norm(q))).sort((a,z)=>(z.ts||'').localeCompare(a.ts||''))[0];
-      return `<div class="support-banner ${ticketsOpen.some(esc2)?'has-open':''}" onclick="openRequestsFiltered('tickets')" title="Open Support Tickets">
+
+      const anyUrgent = urgentM.length || ticketsOpen.some(esc2);
+      return `<div class="support-banner ${anyUrgent?'has-open':''}">
         <span>
-          <div class="sb-title">${ticketsOpen.some(esc2)? '🎫 Support Tickets — escalation needs attention' : '🎫 Support Tickets'}</div>
-          <div class="sb-sub">Booking admin, customer contact, escalations · orngroup.github.io/ornoperations/quote-request/</div>
-          ${latestTicket? `<div class="sb-latest">Latest: <b>${esc((latestTicket.subject||'').slice(0,44))}</b> — ${esc(latestTicket.name||'')} (${esc(categoryMeta(latestTicket.category).short||'')})</div>`:''}
+          <div class="sb-title">${anyUrgent? '🎫 Support — action needed' : '🎫 Support — all clear'}</div>
+          <div class="sb-sub">Messages (TAG USA &amp; ORN Australia) + Tickets (booking admin, customer, escalations)</div>
+          ${latestM? `<div class="sb-latest">Latest message: <b>${esc((latestM.subject||'').slice(0,40))}</b> — ${esc(latestM.name||'')} (${esc(latestM.office||'')})</div>`:''}
+          ${latestTicket? `<div class="sb-latest">Latest ticket: <b>${esc((latestTicket.subject||'').slice(0,40))}</b> — ${esc(latestTicket.name||'')} (${esc(categoryMeta(latestTicket.category).short||'')})</div>`:''}
         </span>
         <span class="sb-stats">
+          <span class="sb-box"><div class="n">${openM.length}</div><div class="l">Msgs pending</div></span>
+          <span class="sb-box"><div class="n">${progM.length}</div><div class="l">Msgs in progress</div></span>
           ${ticketCats.map(k=>`<span class="sb-box"><div class="n">${state.quotes.filter(q=>norm(q)===k && q.status!=='Won' && q.status!=='Lost').length}</div><div class="l">${esc(REQUEST_CATEGORIES[k].short)}</div></span>`).join('')}
         </span>
-        <span class="sb-go">Open Support Tickets →</span>
+        ${urgentM.length? `<span class="sb-urgent">⚠ ${urgentM.length} urgent message${urgentM.length===1?'':'s'} — guest travelling</span>`:''}
+        <span style="display:flex;gap:8px">
+        ${(state.notify&&state.notify.supportChannelUrl)?`<a class="sb-go" style="text-decoration:none" href="${esc(state.notify.supportChannelUrl)}" target="_blank" rel="noopener">Slack ↗</a>`:''}
+        <span class="sb-go" onclick="switchView('messages')">Open Messages →</span>
+        <span class="sb-go" onclick="openRequestsFiltered('tickets')">Open Tickets →</span>
+        </span>
       </div>`;
     })()}
 
+    })()}
+
     <div class="clock-strip">
-      <div class="clock-strip-item"><span class="c-city">Seattle</span><span class="c-time" id="opsClockSeattle">--:--</span></div>
-      <div class="clock-strip-item"><span class="c-city">UK</span><span class="c-time" id="opsClockUK">--:--</span></div>
-      <div class="clock-strip-item"><span class="c-city">Melbourne</span><span class="c-time" id="opsClockMelbourne">--:--</span></div>
+      <div class="clock-strip-item" style="--accent:var(--teal)">
+        <div class="c-head"><span class="c-live"></span><span class="c-city">Seattle</span></div>
+        <div class="c-time" id="opsClockSeattle">--:--:--</div>
+        <div class="c-date" id="opsDateSeattle">—</div>
+      </div>
+      <div class="clock-strip-item" style="--accent:var(--gold)">
+        <div class="c-head"><span class="c-live"></span><span class="c-city">UK</span></div>
+        <div class="c-time" id="opsClockUK">--:--:--</div>
+        <div class="c-date" id="opsDateUK">—</div>
+      </div>
+      <div class="clock-strip-item" style="--accent:var(--cyan)">
+        <div class="c-head"><span class="c-live"></span><span class="c-city">Melbourne</span></div>
+        <div class="c-time" id="opsClockMelbourne">--:--:--</div>
+        <div class="c-date" id="opsDateMelbourne">—</div>
+      </div>
     </div>
 
     <div class="tband-row">
@@ -1378,7 +1398,7 @@ function renderDashboard(){
 
   drawCharts(srcCount, svcCount, byMonth);
   updateOpsClocks();
-  if (!opsClockTimer) opsClockTimer = setInterval(updateOpsClocks, 30000);
+  if (!opsClockTimer) opsClockTimer = setInterval(updateOpsClocks, 1000);
 }
 
 function bandCard(key,label,arr){
