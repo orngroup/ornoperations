@@ -466,7 +466,7 @@ function renderHome(){
         <p>The confidential master directory — every supplier's contacts, commercial terms and system logins (${state.directory.length} suppliers). Senior team only.</p>
         <div class="cnt ${dirAllowed()?'':'restricted'}">${dirAllowed()? 'Access →' : 'Restricted Access'}</div>
       </div>
-      <div class="tile" onclick="window.location.href=OPS_URL+'?go=quotes'">
+      <div class="tile" onclick="window.location.href=OPS_URL+'?go=quotes&filter=sales'">
         <div class="ic">📈</div>
         <h3>Sales &amp; Quotes</h3>
         <p>The client quote/request pipeline — quote &amp; loading requests, booking admin, customer support and escalations, one form in, prioritised and tracked to a sent quote.</p>

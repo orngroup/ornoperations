@@ -30,6 +30,11 @@ input:focus{border-color:#c8102e}
 .hidden{display:none !important}
 .result{margin-top:22px;border-top:1px solid #eceff4;padding-top:20px}
 .status-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-weight:800;font-size:12.5px;color:#fff;margin-bottom:14px}
+.countdown-box{background:#f4f6fa;border-radius:10px;padding:16px;margin-bottom:18px;text-align:center}
+.countdown-box .lbl{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#5f6880;font-weight:700}
+.countdown-box .clock{font-size:22px;font-weight:800;color:#c8102e;margin:4px 0 2px}
+.countdown-box .by{font-size:11px;color:#5f6880}
+.countdown-box.done .clock{color:#2c9e51}
 .field{margin-bottom:14px}
 .field .l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#9aa2b5;font-weight:700}
 .field .v{font-size:14px;color:#1d2433;margin-top:2px}
@@ -51,6 +56,7 @@ input:focus{border-color:#c8102e}
 
     <div class="result hidden" id="result">
       <span class="status-badge" id="statusBadge"></span>
+      <div class="countdown-box" id="rCountdown"></div>
       <div class="field"><div class="l">Request type</div><div class="v" id="rCategory"></div></div>
       <div class="field"><div class="l">Submitted</div><div class="v" id="rSubmitted"></div></div>
       <div class="field" id="rDepartureField"><div class="l">Travel date</div><div class="v" id="rDeparture"></div></div>
@@ -81,6 +87,47 @@ try{
 
 const CATEGORY_LABELS = {quote:'New quote', new_quote:'New quote', quote_addon:'Additional to existing quote/booking', group_quote:'Group tour quote', support:'Booking admin / operational', customer:'Customer contact / support', escalation:'Escalation', management:'Management escalation'};
 const STATUS_COLORS = {New:'#5f6880', Working:'#c9973e', Quoted:'#5b8def', Sent:'#2c9e51', Won:'#2c9e51', Lost:'#9aa2b5'};
+
+// Mirrors requestSlaHours() in the internal portal exactly, so the deadline
+// shown here matches what the team is actually working against.
+const CATEGORY_SLA_DEFAULT = {quote:48, new_quote:48, quote_addon:48, group_quote:48, support:48, customer:48, escalation:4, management:8};
+const QUOTE_TYPE_CATEGORIES = ['quote','new_quote','quote_addon','group_quote'];
+function requestSlaHours(q){
+  if (q.slaOverrideHours!=null && q.slaOverrideHours!=='') return Number(q.slaOverrideHours);
+  if (q.urgency==='urgent') return 24;
+  if (QUOTE_TYPE_CATEGORIES.includes(q.category) && q.departureDate){
+    const days = Math.round((new Date(q.departureDate) - new Date()) / 86400000);
+    if (days!=null && days > 60) return 72;
+  }
+  return CATEGORY_SLA_DEFAULT[q.category] || 48;
+}
+let countdownTimer = null;
+function startCountdown(deadlineMs, isClosed){
+  const el = document.getElementById('rCountdown');
+  if (!el) return;
+  if (countdownTimer) clearInterval(countdownTimer);
+  if (isClosed){
+    el.classList.add('done');
+    el.innerHTML = `<div class="lbl">This request is closed</div><div class="clock">✓</div>`;
+    return;
+  }
+  const byStr = new Date(deadlineMs).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+  function tick(){
+    const msLeft = deadlineMs - Date.now();
+    if (msLeft <= 0){
+      el.innerHTML = `<div class="lbl">Response target</div><div class="clock">Due now</div><div class="by">Expected by ${byStr}</div>`;
+      clearInterval(countdownTimer);
+      return;
+    }
+    const h = Math.floor(msLeft/3600000);
+    const m = Math.floor((msLeft%3600000)/60000);
+    const s = Math.floor((msLeft%60000)/1000);
+    const clockStr = h>0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+    el.innerHTML = `<div class="lbl">We'll be in touch within</div><div class="clock">${clockStr}</div><div class="by">Expected by ${byStr}</div>`;
+  }
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
