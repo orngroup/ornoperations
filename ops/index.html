@@ -2653,11 +2653,12 @@ function renderCards(){
       ${!alreadyImported? `<button class="btn ghost" onclick="importAugCardsStatement()">Import Aug 2026 statement (19)</button>` : ''}
       <button class="btn ghost" onclick="exportCardsCSV()">Export CSV</button>
       <button class="btn ghost" onclick="exportCardsPDF()">Export PDF</button>
+      <button class="btn" onclick="invoiceCharges()">Invoice charges (last 7 days)</button>
       <button class="btn" onclick="addCardTxn()">+ New transaction</button></span>
     </div>
     <datalist id="fileNos">${state.bookings.map(b=>`<option value="${esc(b.fileNo)}">`).join('')}</datalist>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>GBP debited</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
+      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>Margin (10%)</th><th>Invoice gross</th><th>GBP debited</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
       <tbody>${rows.map(r=>{
         const rc = receiptFor(r.id);
         const b = state.bookings.find(b=>b.fileNo===r.fileNo);
@@ -2671,6 +2672,8 @@ function renderCards(){
         <td><input value="${esc(r.company||'')}" placeholder="Company / address / email" onchange="editCardTxn('${r.id}','company',this.value)" style="min-width:190px"></td>
         <td><input value="${esc(r.leadPax||'')}" placeholder="Lead pax name" onchange="editCardTxn('${r.id}','leadPax',this.value)" style="min-width:140px"></td>
         <td><input value="${esc(r.amount)}" placeholder="e.g. 280 EUR" onchange="editCardTxn('${r.id}','amount',this.value)" style="min-width:95px"></td>
+        <td>${(()=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e!=null? '€'+(e*0.10).toFixed(2) : '—'; })()}</td>
+        <td>${(()=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e!=null? '<b>€'+(e*1.10).toFixed(2)+'</b>' : '—'; })()}</td>
         <td><input value="${esc(r.gbpAmount||'')}" placeholder="if known" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:85px"></td>
         <td><select onchange="editCardTxn('${r.id}','card',this.value)">${CARDS.map(c=>`<option ${r.card===c?'selected':''}>${c}</option>`).join('')}</select></td>
         <td><input value="${esc(r.cardLast4||'')}" placeholder="1234" maxlength="4" onchange="editCardTxn('${r.id}','cardLast4',this.value)" style="min-width:60px"></td>
@@ -2681,9 +2684,9 @@ function renderCards(){
           ? `<button class="btn ghost small" onclick="downloadAtt('${rc.id}')">📎 View</button> <button class="btn danger small" onclick="deleteAtt('${rc.id}');renderCards()">✕</button>`
           : `<button class="btn ghost small" onclick="uploadReceipt('${r.id}')">Upload</button>`}</td>
         <td><button class="btn danger small" onclick="delCardTxn('${r.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="16" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
+      </tr>`;}).join('') || '<tr><td colspan="18" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
     </table></div>
-    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Receipts are capped at 700 KB per file — most phone camera photos are larger than this, so use your phone's "medium"/compressed size, or a screenshot of the receipt, rather than the full-resolution photo.</div>`;
+    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Margin (10%) and Invoice gross are calculated automatically from the Euro cost — nothing to enter. Receipts are capped at 700 KB per file — most phone camera photos are larger than this, so use your phone's "medium"/compressed size, or a screenshot of the receipt, rather than the full-resolution photo.</div>`;
 }
 function addCardTxn(){
   saveListItem('cards', {date: todayISO(), serviceDate:'', card: CARDS[0], cardLast4:'', fileNo:'', desc:'', supplier:'', company:'', leadPax:'', amount:'', gbpAmount:'', ourRef:'', rechargeTo:'', notes:''});
@@ -2722,6 +2725,40 @@ function exportCardsCSV(){
   a.download = 'ORN-card-charges-'+todayISO()+'.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   logActivity('-', 'Card charges exported to CSV');
+}
+/* ---- Invoice charges: last 7 days, with 10% margin + gross, ready to key into Xero ---- */
+function invoiceCharges(){
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7); cutoff.setHours(0,0,0,0);
+  const rows = state.cards.filter(r=>{
+    if (!r.date) return false;
+    const d = new Date(r.date);
+    return !isNaN(d) && d >= cutoff;
+  }).sort((a,z)=>(a.date||'').localeCompare(z.date||''));
+
+  if (!rows.length){ alert('No card transactions found in the last 7 days.'); return; }
+
+  let totalNet=0, totalMargin=0, totalGross=0;
+  const lines = [['Transaction date','Service date','TAG/ORN Ref','Description of service','Supplier','Our ref','Net (EUR)','Margin 10% (EUR)','Gross (EUR)'].map(csvEscape).join(',')];
+  rows.forEach(r=>{
+    const m = parseMoney(r.amount);
+    const net = m? (toEUR(m)||0) : 0;
+    const margin = net*0.10;
+    const gross = net*1.10;
+    totalNet += net; totalMargin += margin; totalGross += gross;
+    lines.push([r.date, r.serviceDate||'', r.fileNo||'', r.desc||'', r.supplier||'', r.ourRef||'',
+      net.toFixed(2), margin.toFixed(2), gross.toFixed(2)].map(csvEscape).join(','));
+  });
+  lines.push(['','','','','','TOTAL', totalNet.toFixed(2), totalMargin.toFixed(2), totalGross.toFixed(2)].map(csvEscape).join(','));
+
+  const blob = new Blob([lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const fromStr = cutoff.toISOString().slice(0,10);
+  const toStr = todayISO();
+  a.download = 'ORN-invoice-charges-'+fromStr+'-to-'+toStr+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  logActivity('-', 'Invoice charges exported ('+rows.length+' txns, last 7 days) — gross €'+totalGross.toFixed(2));
+  toast(rows.length+' transactions exported — gross total €'+totalGross.toFixed(2));
 }
 /* ---- PDF export (print-to-PDF, same pattern as other reports) ---- */
 function exportCardsPDF(){
