@@ -2649,16 +2649,24 @@ function renderCards(){
       <div><h2 class="vtitle">Credit card payments</h2>
       <div class="vsub">Supplier payments made by card · ${rows.length} transactions ·
       ${CARDS.map(c=>`${esc(c.split(' ')[0])}: <b>${fmtEUR(totals[c]||0)}</b>`).join(' &nbsp;·&nbsp; ')} (EUR equivalent)</div></div>
-      <span style="display:flex;gap:8px">
+      <span style="display:flex;gap:8px;flex-wrap:wrap">
       ${!alreadyImported? `<button class="btn ghost" onclick="importAugCardsStatement()">Import Aug 2026 statement (19)</button>` : ''}
+      <button class="btn ghost" onclick="backfillAllGbp()">Backfill GBP Paid</button>
       <button class="btn ghost" onclick="exportCardsCSV()">Export CSV</button>
       <button class="btn ghost" onclick="exportCardsPDF()">Export PDF</button>
-      <button class="btn" onclick="invoiceCharges()">Invoice charges (last 7 days)</button>
       <button class="btn" onclick="addCardTxn()">+ New transaction</button></span>
+    </div>
+    <div class="flex-between" style="margin-bottom:10px">
+      <span class="hint" style="margin:0">Xero exports — last 7 days:</span>
+      <span style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost" onclick="invoiceCharges()">Summary (with margin)</button>
+      <button class="btn" onclick="exportXeroBills()">Xero Bill Export (last 7 days)</button>
+      <button class="btn" onclick="exportXeroInvoices()">Xero Invoice Export (last 7 days)</button>
+      </span>
     </div>
     <datalist id="fileNos">${state.bookings.map(b=>`<option value="${esc(b.fileNo)}">`).join('')}</datalist>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>Margin (10%)</th><th>Invoice gross</th><th>GBP debited</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
+      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>Margin (10%)</th><th>Invoice gross</th><th>GBP Paid</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
       <tbody>${rows.map(r=>{
         const rc = receiptFor(r.id);
         const b = state.bookings.find(b=>b.fileNo===r.fileNo);
@@ -2671,10 +2679,10 @@ function renderCards(){
         <td><input value="${esc(r.supplier||'')}" placeholder="Supplier name" onchange="editCardTxn('${r.id}','supplier',this.value)" style="min-width:130px"></td>
         <td><input value="${esc(r.company||'')}" placeholder="Company / address / email" onchange="editCardTxn('${r.id}','company',this.value)" style="min-width:190px"></td>
         <td><input value="${esc(r.leadPax||'')}" placeholder="Lead pax name" onchange="editCardTxn('${r.id}','leadPax',this.value)" style="min-width:140px"></td>
-        <td><input value="${esc(r.amount)}" placeholder="e.g. 280 EUR" onchange="editCardTxn('${r.id}','amount',this.value)" style="min-width:95px"></td>
+        <td><input value="${esc(r.amount)}" placeholder="e.g. 280 EUR" onchange="editCardTxn('${r.id}','amount',this.value);autoFillGbp('${r.id}')" style="min-width:95px"></td>
         <td>${(()=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e!=null? '€'+(e*0.10).toFixed(2) : '—'; })()}</td>
         <td>${(()=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e!=null? '<b>€'+(e*1.10).toFixed(2)+'</b>' : '—'; })()}</td>
-        <td><input value="${esc(r.gbpAmount||'')}" placeholder="if known" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:85px"></td>
+        <td><input value="${esc(r.gbpAmount||'')}" placeholder="auto-filled" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:85px"></td>
         <td><select onchange="editCardTxn('${r.id}','card',this.value)">${CARDS.map(c=>`<option ${r.card===c?'selected':''}>${c}</option>`).join('')}</select></td>
         <td><input value="${esc(r.cardLast4||'')}" placeholder="1234" maxlength="4" onchange="editCardTxn('${r.id}','cardLast4',this.value)" style="min-width:60px"></td>
         <td><input value="${esc(r.ourRef||'')}" placeholder="e.g. Tim" onchange="editCardTxn('${r.id}','ourRef',this.value)" style="min-width:80px"></td>
@@ -2696,6 +2704,38 @@ function editCardTxn(id, f, v){
   const r = state.cards.find(x=>x.id===id); if (!r) return;
   r[f]=v; saveListItem('cards', r);
   logActivity(r.fileNo||'-', 'Card txn '+f+' → '+String(v).slice(0,40));
+}
+/* Auto-fills GBP Paid from the Euro cost whenever it's blank, using the live
+   FX rate in Settings — so GBP Paid stays populated without manual entry.
+   Never overwrites a GBP figure someone has already typed in (the actual
+   card statement amount may differ slightly from the FX-converted estimate). */
+function autoFillGbp(id){
+  const r = state.cards.find(x=>x.id===id); if (!r) return;
+  if (r.gbpAmount && r.gbpAmount.trim()) return;
+  const m = parseMoney(r.amount);
+  const eur = m ? toEUR(m) : null;
+  const gbpRate = state.fx['GBP'];
+  if (eur==null || !gbpRate) return;
+  r.gbpAmount = (eur/gbpRate).toFixed(2)+' GBP';
+  saveListItem('cards', r);
+  renderCards();
+}
+function backfillAllGbp(){
+  const gbpRate = state.fx['GBP'];
+  if (!gbpRate){ alert('No GBP exchange rate set in Settings.'); return; }
+  let filled = 0;
+  state.cards.forEach(r=>{
+    if (r.gbpAmount && r.gbpAmount.trim()) return;
+    const m = parseMoney(r.amount);
+    const eur = m ? toEUR(m) : null;
+    if (eur==null) return;
+    r.gbpAmount = (eur/gbpRate).toFixed(2)+' GBP';
+    saveListItem('cards', r);
+    filled++;
+  });
+  toast(filled+' GBP Paid value'+(filled===1?'':'s')+' filled in');
+  logActivity('-', 'Backfilled GBP Paid for '+filled+' card transactions');
+  renderCards();
 }
 function delCardTxn(id){
   if (!confirm('Delete this card transaction? Its receipt (if any) will also be removed.')) return;
@@ -2759,6 +2799,93 @@ function invoiceCharges(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   logActivity('-', 'Invoice charges exported ('+rows.length+' txns, last 7 days) — gross €'+totalGross.toFixed(2));
   toast(rows.length+' transactions exported — gross total €'+totalGross.toFixed(2));
+}
+function last7DaysCardRows(){
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7); cutoff.setHours(0,0,0,0);
+  return state.cards.filter(r=>{
+    if (!r.date) return false;
+    const d = new Date(r.date);
+    return !isNaN(d) && d >= cutoff;
+  }).sort((a,z)=>(a.date||'').localeCompare(z.date||''));
+}
+const XERO_TEMPLATE_COLS = ['*ContactName','EmailAddress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4',
+  'POCity','PORegion','POPostalCode','POCountry','*InvoiceNumber','*InvoiceDate','*DueDate','Total','InventoryItemCode',
+  'Description','*Quantity','*UnitAmount','*AccountCode','*TaxType','TaxAmount','TrackingName1','TrackingOption1',
+  'TrackingName2','TrackingOption2','Currency'];
+/* Builds one Xero-import-ready row on the exact bulk-import template (same
+   column set Xero uses for both Bills-to-pay and Sales-Invoices import —
+   the difference is which contact and account the row is posted against).
+   AccountCode and TaxType are business-specific to ORN's Xero chart of
+   accounts/tax rates, which this system has no visibility into — they're
+   filled with a clearly-flagged placeholder rather than a guessed code, so
+   nothing silently posts to the wrong ledger account. */
+function xeroRow({contact, invoiceNumber, date, unitAmount, description}){
+  const row = {};
+  XERO_TEMPLATE_COLS.forEach(c=>row[c]='');
+  row['*ContactName'] = contact;
+  row['*InvoiceNumber'] = invoiceNumber;
+  row['*InvoiceDate'] = date;
+  row['*DueDate'] = date; // paid by card already, so due date = invoice date
+  row['Description'] = description;
+  row['*Quantity'] = '1';
+  row['*UnitAmount'] = unitAmount.toFixed(2);
+  row['*AccountCode'] = 'SET-ME';
+  row['*TaxType'] = 'SET-ME';
+  row['Currency'] = 'EUR';
+  return XERO_TEMPLATE_COLS.map(c=>csvEscape(row[c])).join(',');
+}
+function downloadXeroCsv(rows, filename){
+  const lines = [XERO_TEMPLATE_COLS.map(csvEscape).join(','), ...rows];
+  const blob = new Blob([lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+/* Bills to enter — what we owe each supplier. NO markup — the net cost only,
+   exactly as agreed. Import via Xero: Business → Bills to pay → Import. */
+function exportXeroBills(){
+  const cards = last7DaysCardRows();
+  if (!cards.length){ alert('No card transactions found in the last 7 days.'); return; }
+  const rows = cards.map(r=>{
+    const m = parseMoney(r.amount);
+    const net = m? (toEUR(m)||0) : 0;
+    const invoiceNum = (r.fileNo? r.fileNo+'-' : 'ORN-') + r.date.replace(/-/g,'');
+    return xeroRow({
+      contact: r.supplier || r.company || 'Unknown supplier',
+      invoiceNumber: invoiceNum,
+      date: r.serviceDate || r.date,
+      unitAmount: net,
+      description: r.desc || r.fileNo || 'Card charge'
+    });
+  });
+  const fromStr = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  downloadXeroCsv(rows, 'ORN-xero-bills-'+fromStr+'-to-'+todayISO()+'.csv');
+  logActivity('-', 'Xero Bills export — '+cards.length+' txns, last 7 days (no markup)');
+  toast(cards.length+' bills exported — fill in AccountCode/TaxType before importing to Xero');
+}
+/* Invoices to raise — the sale to the client, net + 10% margin.
+   Import via Xero: Business → Invoices → Import. */
+function exportXeroInvoices(){
+  const cards = last7DaysCardRows();
+  if (!cards.length){ alert('No card transactions found in the last 7 days.'); return; }
+  const rows = cards.map(r=>{
+    const m = parseMoney(r.amount);
+    const net = m? (toEUR(m)||0) : 0;
+    const gross = net*1.10;
+    const invoiceNum = (r.fileNo? r.fileNo+'-' : 'ORN-') + r.date.replace(/-/g,'');
+    return xeroRow({
+      contact: r.leadPax || r.company || r.fileNo || 'Client',
+      invoiceNumber: invoiceNum,
+      date: r.serviceDate || r.date,
+      unitAmount: gross,
+      description: r.desc || r.fileNo || 'Travel services'
+    });
+  });
+  const fromStr = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  downloadXeroCsv(rows, 'ORN-xero-invoices-'+fromStr+'-to-'+todayISO()+'.csv');
+  logActivity('-', 'Xero Invoices export — '+cards.length+' txns, last 7 days (+10% margin)');
+  toast(cards.length+' invoices exported — fill in AccountCode/TaxType before importing to Xero');
 }
 /* ---- PDF export (print-to-PDF, same pattern as other reports) ---- */
 function exportCardsPDF(){
