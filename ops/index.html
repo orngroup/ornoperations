@@ -442,6 +442,7 @@ const SEED_VERSION = 5; // bump when the embedded seed data changes
 const CARDS = ['Raj Kumar Mastercard','Sahil Nijhawan Credit Card (Australia)'];
 const RECHARGE_TO = ['','ORN AUS','ORN IND'];
 const DIR_PASS = 'ORNCONFIDENTIAL';
+const CARDS_PASS = 'ORNCARDS2026'; // simple password gate for Credit Card Payments — change here to update it
 const FIN_PASS = 'ORNHISTORY'; // retired — access is now by user
 const DIR_USERS = ['AK','KN','RK','SN'];
 const TAKEOVER_DATE = '2026-07-01';
@@ -2629,9 +2630,33 @@ function renderTakeover(){
 }
 
 /* ================= CREDIT CARD PAYMENTS ================= */
+/* Simple password gate for Credit Card Payments — session-only (resets on
+   reload), separate from the user-account system so it's quick to share
+   with whoever needs it without creating a login. */
+let cardsUnlockedFlag = false;
+function cardsUnlocked(){ return cardsUnlockedFlag; }
+function tryUnlockCards(){
+  if (cardsUnlockedFlag) return true;
+  const pw = prompt('Enter the password for Credit Card Payments:');
+  if (pw === null) return false;
+  if (pw === CARDS_PASS){ cardsUnlockedFlag = true; return true; }
+  alert('Incorrect password.');
+  return false;
+}
 function renderCards(){
   const el = document.getElementById('view-cards');
   if (!el) return;
+  if (!cardsUnlocked()){
+    el.innerHTML = `
+      <h2 class="vtitle">Credit Card Payments</h2>
+      <div class="vsub">Supplier payments made by card, margin, Xero exports</div>
+      <div class="card" style="max-width:480px">
+        <h3>Restricted Access</h3>
+        <p style="margin-bottom:12px">This panel holds card spend, supplier payments and Xero export data.</p>
+        <button class="btn" onclick="if(tryUnlockCards())renderCards()">Enter password</button>
+      </div>`;
+    return;
+  }
   const rows = state.cards.slice().sort((a,z)=>(z.date||'').localeCompare(a.date||''));
   // totals per card in EUR
   const totals = {};
@@ -2643,6 +2668,7 @@ function renderCards(){
   const receipts = Object.values(state.attachments).filter(a=>String(a.bookingId||'').startsWith('CARD-'));
   const receiptFor = id => receipts.find(a=>a.bookingId==='CARD-'+id);
   const alreadyImported = state.cards.some(c=>c.importBatch==='aug2026stmt');
+  const alreadyImportedSep = state.cards.some(c=>c.importBatch==='sep2026stmt');
 
   el.innerHTML = `
     <div class="flex-between" style="margin-bottom:6px">
@@ -2651,22 +2677,23 @@ function renderCards(){
       ${CARDS.map(c=>`${esc(c.split(' ')[0])}: <b>${fmtEUR(totals[c]||0)}</b>`).join(' &nbsp;·&nbsp; ')} (EUR equivalent)</div></div>
       <span style="display:flex;gap:8px;flex-wrap:wrap">
       ${!alreadyImported? `<button class="btn ghost" onclick="importAugCardsStatement()">Import Aug 2026 statement (19)</button>` : ''}
+      ${!alreadyImportedSep? `<button class="btn ghost" onclick="importSepCardsStatement()">Import full statement to 3 Sep (84)</button>` : ''}
       <button class="btn ghost" onclick="backfillAllGbp()">Backfill GBP Paid</button>
       <button class="btn ghost" onclick="exportCardsCSV()">Export CSV</button>
       <button class="btn ghost" onclick="exportCardsPDF()">Export PDF</button>
       <button class="btn" onclick="addCardTxn()">+ New transaction</button></span>
     </div>
     <div class="flex-between" style="margin-bottom:10px">
-      <span class="hint" style="margin:0">Xero exports — last 7 days:</span>
+      <span class="hint" style="margin:0">Xero exports — not yet invoiced (${notYetInvoicedCardRows().length} pending):</span>
       <span style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost" onclick="invoiceCharges()">Summary (with margin)</button>
-      <button class="btn" onclick="exportXeroBills()">Xero Bill Export (last 7 days)</button>
-      <button class="btn" onclick="exportXeroInvoices()">Xero Invoice Export (last 7 days)</button>
+      <button class="btn" onclick="exportXeroBills()">Xero Bill Export</button>
+      <button class="btn" onclick="exportXeroInvoices()">Xero Invoice Export</button>
       </span>
     </div>
     <datalist id="fileNos">${state.bookings.map(b=>`<option value="${esc(b.fileNo)}">`).join('')}</datalist>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>Margin (10%)</th><th>Invoice gross</th><th>GBP Paid</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
+      <thead><tr><th>Txn date</th><th>Service date</th><th>TAG/ORN Ref</th><th>Description of service</th><th>Supplier</th><th>Company / address / email contact</th><th>Lead pax name</th><th>Euro cost</th><th>GBP Paid</th><th>Margin (10%)</th><th>Invoice gross</th><th>Invoiced Xero</th><th>Card used</th><th>Card last 4</th><th>Our ref</th><th>Recharge to</th><th>Notes</th><th>Confirmation / receipt</th><th></th></tr></thead>
       <tbody>${rows.map(r=>{
         const rc = receiptFor(r.id);
         const b = state.bookings.find(b=>b.fileNo===r.fileNo);
@@ -2680,9 +2707,10 @@ function renderCards(){
         <td><input value="${esc(r.company||'')}" placeholder="Company / address / email" onchange="editCardTxn('${r.id}','company',this.value)" style="min-width:190px"></td>
         <td><input value="${esc(r.leadPax||'')}" placeholder="Lead pax name" onchange="editCardTxn('${r.id}','leadPax',this.value)" style="min-width:140px"></td>
         <td><input value="${esc(r.amount)}" placeholder="e.g. 280 EUR" onchange="editCardTxn('${r.id}','amount',this.value);autoFillGbp('${r.id}')" style="min-width:95px"></td>
-        <td>${(()=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e!=null? '€'+(e*0.10).toFixed(2) : '—'; })()}</td>
-        <td>${(()=>{ const m=parseMoney(r.amount); const e=m?toEUR(m):null; return e!=null? '<b>€'+(e*1.10).toFixed(2)+'</b>' : '—'; })()}</td>
         <td><input value="${esc(r.gbpAmount||'')}" placeholder="auto-filled" onchange="editCardTxn('${r.id}','gbpAmount',this.value)" style="min-width:85px"></td>
+        <td>${(()=>{ const g=parseFloat(r.gbpAmount); return !isNaN(g)? '£'+(g*0.10).toFixed(2) : '—'; })()}</td>
+        <td>${(()=>{ const g=parseFloat(r.gbpAmount); return !isNaN(g)? '<b>£'+(g*1.10).toFixed(2)+'</b>' : '—'; })()}</td>
+        <td><input type="date" value="${esc(r.invoicedXero||'')}" onchange="editCardTxn('${r.id}','invoicedXero',this.value)" style="min-width:130px"></td>
         <td><select onchange="editCardTxn('${r.id}','card',this.value)">${CARDS.map(c=>`<option ${r.card===c?'selected':''}>${c}</option>`).join('')}</select></td>
         <td><input value="${esc(r.cardLast4||'')}" placeholder="1234" maxlength="4" onchange="editCardTxn('${r.id}','cardLast4',this.value)" style="min-width:60px"></td>
         <td><input value="${esc(r.ourRef||'')}" placeholder="e.g. Tim" onchange="editCardTxn('${r.id}','ourRef',this.value)" style="min-width:80px"></td>
@@ -2692,9 +2720,9 @@ function renderCards(){
           ? `<button class="btn ghost small" onclick="downloadAtt('${rc.id}')">📎 View</button> <button class="btn danger small" onclick="deleteAtt('${rc.id}');renderCards()">✕</button>`
           : `<button class="btn ghost small" onclick="uploadReceipt('${r.id}')">Upload</button>`}</td>
         <td><button class="btn danger small" onclick="delCardTxn('${r.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="18" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
+      </tr>`;}).join('') || '<tr><td colspan="19" class="empty">No card transactions recorded yet.</td></tr>'}</tbody>
     </table></div>
-    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Margin (10%) and Invoice gross are calculated automatically from the Euro cost — nothing to enter. Receipts are capped at 700 KB per file — most phone camera photos are larger than this, so use your phone's "medium"/compressed size, or a screenshot of the receipt, rather than the full-resolution photo.</div>`;
+    <div class="hint" style="margin-top:8px">Amounts accept any currency (e.g. "280 EUR", "USD 264.01") — totals above convert to EUR at the Settings rates. Margin (10%) and Invoice gross are calculated automatically from GBP Paid — nothing to enter. Invoiced Xero is the date this line was included in a Xero export; leave blank until it's actually gone in. Receipts are capped at 700 KB per file — most phone camera photos are larger than this, so use your phone's "medium"/compressed size, or a screenshot of the receipt, rather than the full-resolution photo.</div>`;
 }
 function addCardTxn(){
   saveListItem('cards', {date: todayISO(), serviceDate:'', card: CARDS[0], cardLast4:'', fileNo:'', desc:'', supplier:'', company:'', leadPax:'', amount:'', gbpAmount:'', ourRef:'', rechargeTo:'', notes:''});
@@ -2768,20 +2796,13 @@ function exportCardsCSV(){
 }
 /* ---- Invoice charges: last 7 days, with 10% margin + gross, ready to key into Xero ---- */
 function invoiceCharges(){
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7); cutoff.setHours(0,0,0,0);
-  const rows = state.cards.filter(r=>{
-    if (!r.date) return false;
-    const d = new Date(r.date);
-    return !isNaN(d) && d >= cutoff;
-  }).sort((a,z)=>(a.date||'').localeCompare(z.date||''));
-
-  if (!rows.length){ alert('No card transactions found in the last 7 days.'); return; }
+  const rows = notYetInvoicedCardRows();
+  if (!rows.length){ alert('Nothing to export — every card transaction already has an Invoiced Xero date.'); return; }
 
   let totalNet=0, totalMargin=0, totalGross=0;
-  const lines = [['Transaction date','Service date','TAG/ORN Ref','Description of service','Supplier','Our ref','Net (EUR)','Margin 10% (EUR)','Gross (EUR)'].map(csvEscape).join(',')];
+  const lines = [['Transaction date','Service date','TAG/ORN Ref','Description of service','Supplier','Our ref','Net GBP','Margin 10% GBP','Gross GBP'].map(csvEscape).join(',')];
   rows.forEach(r=>{
-    const m = parseMoney(r.amount);
-    const net = m? (toEUR(m)||0) : 0;
+    const net = parseFloat(r.gbpAmount) || 0;
     const margin = net*0.10;
     const gross = net*1.10;
     totalNet += net; totalMargin += margin; totalGross += gross;
@@ -2793,20 +2814,20 @@ function invoiceCharges(){
   const blob = new Blob([lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const fromStr = cutoff.toISOString().slice(0,10);
-  const toStr = todayISO();
-  a.download = 'ORN-invoice-charges-'+fromStr+'-to-'+toStr+'.csv';
+  a.download = 'ORN-invoice-charges-'+todayISO()+'.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  logActivity('-', 'Invoice charges exported ('+rows.length+' txns, last 7 days) — gross €'+totalGross.toFixed(2));
-  toast(rows.length+' transactions exported — gross total €'+totalGross.toFixed(2));
+  logActivity('-', 'Invoice charges summary exported ('+rows.length+' not-yet-invoiced txns) — gross £'+totalGross.toFixed(2));
+  toast(rows.length+' transactions exported — gross total £'+totalGross.toFixed(2));
 }
-function last7DaysCardRows(){
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7); cutoff.setHours(0,0,0,0);
-  return state.cards.filter(r=>{
-    if (!r.date) return false;
-    const d = new Date(r.date);
-    return !isNaN(d) && d >= cutoff;
-  }).sort((a,z)=>(a.date||'').localeCompare(z.date||''));
+/* Transactions still needing a Xero entry — this is what "mark as invoiced"
+   is for: once a row's Invoiced Xero date is set, it drops out of every
+   export automatically, so nothing needs manually checking for duplicates. */
+function notYetInvoicedCardRows(){
+  return state.cards.filter(r=>!r.invoicedXero).sort((a,z)=>(a.date||'').localeCompare(z.date||''));
+}
+function markRowsInvoiced(rows){
+  const today = todayISO();
+  rows.forEach(r=>{ r.invoicedXero = today; saveListItem('cards', r); });
 }
 const XERO_TEMPLATE_COLS = ['*ContactName','EmailAddress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4',
   'POCity','PORegion','POPostalCode','POCountry','*InvoiceNumber','*InvoiceDate','*DueDate','Total','InventoryItemCode',
@@ -2831,7 +2852,7 @@ function xeroRow({contact, invoiceNumber, date, unitAmount, description}){
   row['*UnitAmount'] = unitAmount.toFixed(2);
   row['*AccountCode'] = 'SET-ME';
   row['*TaxType'] = 'SET-ME';
-  row['Currency'] = 'EUR';
+  row['Currency'] = 'GBP';
   return XERO_TEMPLATE_COLS.map(c=>csvEscape(row[c])).join(',');
 }
 function downloadXeroCsv(rows, filename){
@@ -2843,13 +2864,15 @@ function downloadXeroCsv(rows, filename){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 /* Bills to enter — what we owe each supplier. NO markup — the net cost only,
-   exactly as agreed. Import via Xero: Business → Bills to pay → Import. */
+   exactly as agreed. Import via Xero: Business → Bills to pay → Import.
+   Only pulls transactions not yet invoiced, then marks them invoiced so the
+   same rows never export twice. */
 function exportXeroBills(){
-  const cards = last7DaysCardRows();
-  if (!cards.length){ alert('No card transactions found in the last 7 days.'); return; }
+  const cards = notYetInvoicedCardRows();
+  if (!cards.length){ alert('Nothing to export — every card transaction already has an Invoiced Xero date.'); return; }
+  if (!confirm('Export '+cards.length+' not-yet-invoiced Bills? These will be marked as invoiced (today\'s date) once exported.')) return;
   const rows = cards.map(r=>{
-    const m = parseMoney(r.amount);
-    const net = m? (toEUR(m)||0) : 0;
+    const net = parseFloat(r.gbpAmount) || 0;
     const invoiceNum = (r.fileNo? r.fileNo+'-' : 'ORN-') + r.date.replace(/-/g,'');
     return xeroRow({
       contact: r.supplier || r.company || 'Unknown supplier',
@@ -2859,19 +2882,21 @@ function exportXeroBills(){
       description: r.desc || r.fileNo || 'Card charge'
     });
   });
-  const fromStr = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
-  downloadXeroCsv(rows, 'ORN-xero-bills-'+fromStr+'-to-'+todayISO()+'.csv');
-  logActivity('-', 'Xero Bills export — '+cards.length+' txns, last 7 days (no markup)');
-  toast(cards.length+' bills exported — fill in AccountCode/TaxType before importing to Xero');
+  downloadXeroCsv(rows, 'ORN-xero-bills-'+todayISO()+'.csv');
+  markRowsInvoiced(cards);
+  logActivity('-', 'Xero Bills export — '+cards.length+' txns (no markup) — marked invoiced');
+  toast(cards.length+' bills exported and marked invoiced — fill in AccountCode/TaxType before importing to Xero');
+  renderCards();
 }
 /* Invoices to raise — the sale to the client, net + 10% margin.
-   Import via Xero: Business → Invoices → Import. */
+   Import via Xero: Business → Invoices → Import. Same not-yet-invoiced +
+   auto-mark behaviour as Bills. */
 function exportXeroInvoices(){
-  const cards = last7DaysCardRows();
-  if (!cards.length){ alert('No card transactions found in the last 7 days.'); return; }
+  const cards = notYetInvoicedCardRows();
+  if (!cards.length){ alert('Nothing to export — every card transaction already has an Invoiced Xero date.'); return; }
+  if (!confirm('Export '+cards.length+' not-yet-invoiced Invoices? These will be marked as invoiced (today\'s date) once exported.')) return;
   const rows = cards.map(r=>{
-    const m = parseMoney(r.amount);
-    const net = m? (toEUR(m)||0) : 0;
+    const net = parseFloat(r.gbpAmount) || 0;
     const gross = net*1.10;
     const invoiceNum = (r.fileNo? r.fileNo+'-' : 'ORN-') + r.date.replace(/-/g,'');
     return xeroRow({
@@ -2882,10 +2907,11 @@ function exportXeroInvoices(){
       description: r.desc || r.fileNo || 'Travel services'
     });
   });
-  const fromStr = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
-  downloadXeroCsv(rows, 'ORN-xero-invoices-'+fromStr+'-to-'+todayISO()+'.csv');
-  logActivity('-', 'Xero Invoices export — '+cards.length+' txns, last 7 days (+10% margin)');
-  toast(cards.length+' invoices exported — fill in AccountCode/TaxType before importing to Xero');
+  downloadXeroCsv(rows, 'ORN-xero-invoices-'+todayISO()+'.csv');
+  markRowsInvoiced(cards);
+  logActivity('-', 'Xero Invoices export — '+cards.length+' txns (+10% margin) — marked invoiced');
+  toast(cards.length+' invoices exported and marked invoiced — fill in AccountCode/TaxType before importing to Xero');
+  renderCards();
 }
 /* ---- PDF export (print-to-PDF, same pattern as other reports) ---- */
 function exportCardsPDF(){
@@ -2950,6 +2976,108 @@ function importAugCardsStatement(){
     });
   });
   logActivity('-', 'Imported Aug 2026 card statement ('+AUG2026_CARD_STATEMENT.length+' txns)');
+  renderCards();
+}
+const SEP2026_CARD_STATEMENT = [
+  {date:'2026-08-13', serviceDate:'2026-09-19', fileNo:'TAG0132KZ9K', desc:'Venice Water Taxi', supplier:'VWTC', leadPax:'Butterfield', amount:'60', gbpAmount:'68.79', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-13', serviceDate:'', fileNo:'TAG0147XXNZ', desc:'', supplier:'Mint', leadPax:'', amount:'557.19 GBP', gbpAmount:'557.19', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-14', serviceDate:'2026-09-09', fileNo:'TAG014EL6KY', desc:'Corinth & Naflplion', supplier:'Viator', leadPax:'Lanctot', amount:'', gbpAmount:'97.58', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-14', serviceDate:'2026-09-04', fileNo:'TAG014EL6KY', desc:'Delphi Skip the Line', supplier:'GYG', leadPax:'Lanctot', amount:'', gbpAmount:'362.46', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-14', serviceDate:'2026-09-07', fileNo:'TAG014EL6KY', desc:'Acropolis, Plaka Ancient Greek Agora', supplier:'Viator', leadPax:'Lanctot', amount:'', gbpAmount:'482.74', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-14', serviceDate:'2026-09-11', fileNo:'TAG014EL6KY', desc:'Athens By Night', supplier:'Viator', leadPax:'Lanctot', amount:'', gbpAmount:'141.86', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-20', fileNo:'TAG0132K90M', desc:'Venice Water Taxi', supplier:'VWTC', leadPax:'Davidson', amount:'80.00 EUR', gbpAmount:'68.79', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-23', fileNo:'TAG0146DE3J', desc:'Semi-private Colosseum Guided Tour - Private Small Group Tour', supplier:'Viator', leadPax:'McFarland', amount:'', gbpAmount:'181.16', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-23', fileNo:'TAG0146DE3J', desc:'Twilight Trastevere Rome Food Tour - Shared Tour (Walking Tour)', supplier:'Viator', leadPax:'McFarland', amount:'', gbpAmount:'235.16', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-23', fileNo:'TAG0146DE3J', desc:'Accademia Museum - Shared Tour', supplier:'Viator', leadPax:'McFarland', amount:'', gbpAmount:'87.08', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-11', fileNo:'TAG0146DE3J', desc:'Barcelona Highlights with Sagrada', supplier:'GYG', leadPax:'McFarland', amount:'', gbpAmount:'34.18', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-25', fileNo:'TAG0146DE3J', desc:'Rome to Florence Train one way std class', supplier:'Rail Europe', leadPax:'McFarland', amount:'59.80 EUR', gbpAmount:'50.56', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-28', fileNo:'TAG0146DE3J', desc:'Florence to Venice + Return Journey Train', supplier:'Rail Europe', leadPax:'McFarland', amount:'139.60 EUR', gbpAmount:'120.04', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'', fileNo:'TAG0147XXNZ', desc:'', supplier:'Facture', leadPax:'Liberman', amount:'23.27 EUR', gbpAmount:'20.01', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-05', fileNo:'TAG014EL6KY', desc:'V hotel Delphi to Athens Lodge', supplier:'Transfeero', leadPax:'Lanctot', amount:'259.80 EUR', gbpAmount:'223.4', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-17', serviceDate:'2026-09-13', fileNo:'TAG014EL6KY', desc:'Thesaloniki Skip the Line', supplier:'GYG', leadPax:'Lanctot', amount:'', gbpAmount:'153.8', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-18', serviceDate:'2026-10-02', fileNo:'ORN014CLW54', desc:'Transfer from EDI to Yotel', supplier:'ATT', leadPax:'Talbot', amount:' ', gbpAmount:'43.25', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-18', serviceDate:'2026-10-02', fileNo:'ORN014CLW54', desc:'Transfer from Dublin hotel to DUB', supplier:'Hoppa', leadPax:'Talbot', amount:'', gbpAmount:'50.69', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-18', serviceDate:'2026-10-12', fileNo:'TAG012B75ZG', desc:'Transfer from naples to sorrento (redo)', supplier:'Transfeero', leadPax:'Colgan', amount:'194.21 EUR', gbpAmount:'167', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-18', serviceDate:'2026-10-08', fileNo:'TAG012B75ZG', desc:'Transfer from sorrento to naples (redo)', supplier:'Transfeero', leadPax:'Colgan', amount:'204.67 EUR', gbpAmount:'176', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-19', serviceDate:'2026-09-18', fileNo:'TAG012B75ZG', desc:'Transfer from hotel to train station Paris (redo)', supplier:'Transfeero', leadPax:'Colgan', amount:'71.80 EUR', gbpAmount:'61.74', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-20', serviceDate:'2026-10-02', fileNo:'TAG012B75ZG ', desc:'Tour', supplier:'Under The Tuscan Sun', leadPax:'Colgan', amount:'880', gbpAmount:'756.72', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-20', serviceDate:'2026-10-01', fileNo:'TAG0146DE3J', desc:'Transfer', supplier:'Hoppa', leadPax:'McFarland', amount:'', gbpAmount:'154.04', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-20', serviceDate:'2026-09-23', fileNo:'TAG0146DE3J', desc:'Tour', supplier:'Viator', leadPax:'Mc Farland', amount:'', gbpAmount:'157.36', invoicedXero:'2026-08-21', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:''},
+  {date:'2026-08-24', serviceDate:'2026-09-27', fileNo:'TAG0107Y3Y5', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Huerta', amount:'', gbpAmount:'132.52', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-24', serviceDate:'2026-09-20', fileNo:'TAG014HQJZ3', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Guarino', amount:'', gbpAmount:'45.46', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-16', fileNo:'TAG014HQJZ3', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Guarino', amount:'', gbpAmount:'49.94', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-16', fileNo:'TAG014HQJZ3', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Guarino', amount:'56.67', gbpAmount:'48.73', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-18', fileNo:'TAG014HQJZ3', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Guarino', amount:'56.67', gbpAmount:'48.73', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-26', serviceDate:'2026-09-22', fileNo:'TAG0107Y3Y5', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Huerta', amount:'', gbpAmount:'135.23', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-10', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Anderson', amount:'', gbpAmount:'76.77', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-10', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Anderson', amount:'', gbpAmount:'82.78', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-13', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Anderson', amount:'', gbpAmount:'82.78', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-19', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Anderson', amount:'', gbpAmount:'62.22', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-28', serviceDate:'2026-10-18', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Anderson', amount:'', gbpAmount:'160.05', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-08', fileNo:'TAG013VUG4M', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Friedly', amount:'20.56', gbpAmount:'17.57', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-01', fileNo:'TAG014D686H', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Gardner', amount:'', gbpAmount:'18.18', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-04', fileNo:'TAG014D686H', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Gardner', amount:'20.56', gbpAmount:'19.28', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-03', serviceDate:'2026-10-09', fileNo:'TAG010B2F1O', desc:'Transfer', supplier:'Airport Taxi Transfers', leadPax:'Montague', amount:'', gbpAmount:'77.37', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-16', fileNo:'TAG014HQJZ3', desc:'Ferry', supplier:'Ferry Hopper', leadPax:'Guarino', amount:'', gbpAmount:'81.78', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-18', fileNo:'TAG014HQJZ3', desc:'Ferry', supplier:'Ferry Hopper', leadPax:'Guarino', amount:'', gbpAmount:'96.64', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-24', serviceDate:'2026-09-15', fileNo:'TAG014HQJZ3', desc:'Tour', supplier:'Get Your Guide', leadPax:'Guarino', amount:'', gbpAmount:'50.55', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-01', serviceDate:'2026-10-09', fileNo:'ORN014CXMVH', desc:'Tour', supplier:'Get Your Guide', leadPax:'Fisher', amount:'', gbpAmount:'289.9', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-26', serviceDate:'2026-09-22', fileNo:'TAG013IB335', desc:'Transfer', supplier:'Hoppa', leadPax:'Jonkosky', amount:'', gbpAmount:'96.53', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-03', serviceDate:'2026-10-10', fileNo:'TAG010B2F1O', desc:'Transfer', supplier:'Hoppa', leadPax:'Montague', amount:'', gbpAmount:'274.85', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-26', serviceDate:'2026-09-14', fileNo:'TAG0132KZ9K', desc:'Car Hire', supplier:'Ken Newton', leadPax:'Butterfield', amount:'', gbpAmount:'227.44', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-28', serviceDate:'2026-09-06', fileNo:'ORN01321C6V', desc:'Newton Travel', supplier:'Ken Newton', leadPax:' Coneybeare', amount:'', gbpAmount:'1604.26', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Ken'},
+  {date:'2026-09-02', serviceDate:'2026-09-28', fileNo:'TAG014P083F ', desc:'Tour', supplier:'Living Tours', leadPax:'Simmons', amount:'78', gbpAmount:'67.1', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-10-06', fileNo:'TAG011FXC18', desc:'Train', supplier:'PKP Trains', leadPax:'Mojica', amount:'69.75', gbpAmount:'59.98', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-01', serviceDate:'2026-10-08', fileNo:'ORN014CXMVH', desc:'Train', supplier:'Rail Europe', leadPax:'Fisher', amount:'', gbpAmount:'130.99', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-28', serviceDate:'2026-10-07', fileNo:'TAG014P083F', desc:'Train', supplier:'Rail Ninja', leadPax:'Simmons', amount:'83', gbpAmount:'71.37', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-01', serviceDate:'2026-10-01', fileNo:'ORN014CXMVH ', desc:'Train', supplier:'Trainline', leadPax:'Fisher', amount:'', gbpAmount:'172.37', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-28', serviceDate:'2026-10-07', fileNo:'TAG014P083F', desc:'Transfer', supplier:'Transfeero', leadPax:'Simmons', amount:'35.71', gbpAmount:'30.71', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-10-06', fileNo:'TAG011FXC18', desc:'Transfer', supplier:'Transfeero', leadPax:'Mojica', amount:'62.15', gbpAmount:'53.44', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-22', fileNo:'TAG011FXC18', desc:'Transfer', supplier:'Transfeero', leadPax:'Mojica', amount:'124.04', gbpAmount:'106.66', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-10-03', fileNo:'TAG011FXC18', desc:'Transfer', supplier:'Transfeero', leadPax:'Mojica', amount:'139.01', gbpAmount:'119.54', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-25', serviceDate:'2026-09-18', fileNo:'TAG014HQJZ3', desc:'Transfer', supplier:'Transfeero', leadPax:'Guarino', amount:'57.42', gbpAmount:'49.38', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-26', serviceDate:'2026-10-10', fileNo:'TAG0122ZWGP', desc:'Transfer', supplier:'Transfeero', leadPax:'Peter', amount:'66.45', gbpAmount:'58.14', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-26', serviceDate:'2026-09-26', fileNo:'TAG013IB335', desc:'Transfer', supplier:'Transfeero', leadPax:'Jonkosky', amount:'', gbpAmount:'104.26', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-06', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Transfeero', leadPax:'Anderson', amount:'94.64', gbpAmount:'81.38', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-06', fileNo:'TAG01271XSG', desc:'Transfer', supplier:'Transfeero', leadPax:'Anderson', amount:'158.63', gbpAmount:'136.41', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-03', fileNo:'TAG0127XSG', desc:'Transfer', supplier:'Transfeero', leadPax:'Anderson', amount:'', gbpAmount:'124.47', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-28', serviceDate:'2026-10-07', fileNo:'TAG014P083F', desc:'Transfer', supplier:'Transfeero', leadPax:'Simmons', amount:'', gbpAmount:'41.67', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-04', fileNo:'TAG014D686H', desc:'Transfer', supplier:'Transfeero', leadPax:'Gardner', amount:'70.98', gbpAmount:'60.67', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-07', fileNo:'TAG014D686H', desc:'Transfer', supplier:'Transfeero', leadPax:'Gardner', amount:'67.34', gbpAmount:'57.56', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-07', fileNo:'TAG014D686H', desc:'Transfer', supplier:'Transfeero', leadPax:'Gardner', amount:'97.36', gbpAmount:'83.21', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-09-26', fileNo:'TAG014P083F', desc:'Transfer', supplier:'Transfeero', leadPax:'Simmons', amount:'44.31', gbpAmount:'38.1', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-09-29', fileNo:'TAG014P083F', desc:'Transfer', supplier:'Transfeero', leadPax:'Simmons', amount:'38.63', gbpAmount:'34.54', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-04', fileNo:'TAG014P083F', desc:'Transfer', supplier:'Transfeero', leadPax:'Simmons', amount:'37.78', gbpAmount:'32.29', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-08', fileNo:'TAG014P083F', desc:'Transfer', supplier:'Transfeero', leadPax:'Simmons', amount:'38.94', gbpAmount:'33.28', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-08-27', serviceDate:'2026-10-01', fileNo:'TAG01271XSG', desc:'Tour', supplier:'Viator', leadPax:'Anderson', amount:'', gbpAmount:'318', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-01', serviceDate:'2026-10-06', fileNo:'ORN014CXMVH', desc:'Tour', supplier:'Viator', leadPax:'Fisher', amount:'', gbpAmount:'489.06', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim '},
+  {date:'2026-09-01', serviceDate:'2026-10-10', fileNo:'ORN014CXMVH', desc:'Tour', supplier:'Viator', leadPax:'Fisher', amount:'', gbpAmount:'172.92', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-01', serviceDate:'2026-09-30', fileNo:'ORN014CXMVH ', desc:'Experience', supplier:'Viator', leadPax:'Fisher', amount:'', gbpAmount:'165.94', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-09', fileNo:'TAG010B2F1O', desc:'Tour', supplier:'Viator', leadPax:'Montague', amount:'', gbpAmount:'492.31', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-02', fileNo:'TAG014D686H', desc:'Tour', supplier:'Viator', leadPax:'Gardner', amount:'', gbpAmount:'254.46', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-02', fileNo:'TAG014D686H', desc:'Tour', supplier:'Viator', leadPax:'Gardner', amount:'', gbpAmount:'67.46', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-09-03', fileNo:'TAG014D686H', desc:'Tour', supplier:'Viator', leadPax:'Gardner', amount:'', gbpAmount:'122.32', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-05', fileNo:'TAG014D686H', desc:'Experience', supplier:'Viator', leadPax:'Gardner', amount:'', gbpAmount:'167.78', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-05', fileNo:'TAG014P083F', desc:'Tour', supplier:'Viator', leadPax:'Simmons', amount:'', gbpAmount:'122.32', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-09-06', fileNo:'TAG014P083F', desc:'Tour', supplier:'Viator', leadPax:'Simmons', amount:'', gbpAmount:'305.85', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-03', serviceDate:'2026-10-09', fileNo:'TAG010B2F1O', desc:'Tour', supplier:'Viator', leadPax:'Montague', amount:'', gbpAmount:'492.32', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-05', fileNo:'TAG010B2F1O', desc:'Transfer', supplier:'Venice Water Taxi', leadPax:'Montague', amount:'160', gbpAmount:'136.75', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'},
+  {date:'2026-09-02', serviceDate:'2026-10-07', fileNo:'TAG010B2F1O', desc:'Transfer', supplier:'Venice Water Taxi', leadPax:'Montague', amount:'80', gbpAmount:'68.68', invoicedXero:'2026-09-03', card:'Raj Kumar Mastercard', cardLast4:'', ourRef:'Tim'}
+];
+function importSepCardsStatement(){
+  if (state.cards.some(c=>c.importBatch==='sep2026stmt')){ alert('This statement has already been imported.'); return; }
+  const alreadyAug = state.cards.some(c=>c.importBatch==='aug2026stmt');
+  const warn = alreadyAug ? ' Note: this includes some of the same transactions as the earlier Aug import (now with full GBP/Invoiced Xero data) — check for duplicates before importing if that batch is still present.' : '';
+  if (!confirm('Import '+SEP2026_CARD_STATEMENT.length+' transactions up to 3 Sep 2026, with GBP amounts and Invoiced Xero dates already filled in from the spreadsheet?'+warn)) return;
+  SEP2026_CARD_STATEMENT.forEach(row=>{
+    saveListItem('cards', {
+      date: row.date, serviceDate: row.serviceDate, card: row.card||CARDS[0], cardLast4: row.cardLast4,
+      fileNo: row.fileNo, desc: row.desc, supplier: row.supplier, company:'', leadPax: row.leadPax,
+      amount: row.amount, gbpAmount: row.gbpAmount, invoicedXero: row.invoicedXero, ourRef: row.ourRef,
+      rechargeTo:'', notes:'', importBatch:'sep2026stmt'
+    });
+  });
+  logActivity('-', 'Imported Sep 2026 card statement ('+SEP2026_CARD_STATEMENT.length+' txns)');
   renderCards();
 }
 function deleteAttSilent(id){
