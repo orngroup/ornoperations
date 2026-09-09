@@ -1945,7 +1945,12 @@ function attachmentsFor(bookingId){
 }
 /* Re-tag attachment compIdx values after the array mutation given by fn.
    We snapshot the component object each attachment points at, run fn, then
-   point each attachment at the component's new position. */
+   point each attachment at the component's new position — and persist that
+   change, since attachments are separate Firestore documents from the
+   booking. Without this, the next attachments sync (which can fire from
+   any upload/delete anywhere in the app, not just this booking) silently
+   overwrites the in-memory fix with the stale compIdx still in Firestore,
+   making the attachment appear to "stay behind" on the old component. */
 function remapAttachmentIdx(bookingId, fn, removedIdx){
   const b = getBooking(bookingId);
   const atts = attachmentsFor(bookingId);
@@ -1954,8 +1959,11 @@ function remapAttachmentIdx(bookingId, fn, removedIdx){
   snap.forEach(({a, comp})=>{
     if (comp === undefined){ return; }
     const ni = b.components.indexOf(comp);
-    if (ni === -1){ /* the component it pointed at was removed */ a.compIdx = -1; }
-    else a.compIdx = ni;
+    const newIdx = (ni === -1) ? -1 : ni; // -1: the component it pointed at was removed
+    if (a.compIdx === newIdx) return;
+    a.compIdx = newIdx;
+    if (FIRE) DB.collection(COLL.attachments).doc(a.id).update({compIdx: newIdx});
+    else lsSet('attachments', state.attachments);
   });
 }
 function sortComponentsByDate(b){
