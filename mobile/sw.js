@@ -1,7 +1,7 @@
 // ORN Ops Mobile — service worker
 // Caches the app shell so the login/search UI opens even on a poor connection.
 // Booking DATA is always fetched live from Firebase (never cached), so it's current.
-const CACHE = 'orn-ops-mobile-v2';
+const CACHE = 'orn-ops-mobile-v3';
 const SHELL = ['./', './index.html', './users.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png', './icon-64.png'];
 
 self.addEventListener('install', e=>{
