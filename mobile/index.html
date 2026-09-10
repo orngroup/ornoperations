@@ -99,6 +99,13 @@ h3.sh{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--red
 .comp .cdate{font-size:11px;color:var(--muted)}
 .comp .cact{font-weight:600;font-size:14px;margin:2px 0}
 .comp .cmeta{font-size:12px;color:var(--muted)}
+.doc{border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.doc .dinfo{min-width:0}
+.doc .dname{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc .dmeta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.doc .dopen{flex-shrink:0;background:var(--red);color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700}
+.doc .dopen[disabled]{opacity:.5}
+.docempty{color:var(--muted);font-size:13px}
 .stat{font-size:10px;font-weight:800;padding:3px 9px;border-radius:10px;white-space:nowrap}
 .stat.Confirmed{background:var(--okbg);color:var(--ok)} .stat.Reconfirmed{background:var(--bluebg);color:var(--recon)}
 .stat.Pending{background:var(--warnbg);color:var(--warn)} .stat.Cancelled{background:#eef0f4;color:#9aa2b5}
@@ -227,7 +234,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "470679786970",
   appId: "1:470679786970:web:28945392beb13b9a2d5ce3"
 };
-const COLL = { bookings:'recon_bookings', activity:'recon_activity', users:'recon_users' };
+const COLL = { bookings:'recon_bookings', activity:'recon_activity', users:'recon_users', attachments:'recon_attachments' };
 let DB=null, FIRE=false;
 const state = { user:null, users: MOBILE_USERS.slice(), bookings:[], current:null };
 
@@ -391,7 +398,55 @@ function markTaskDone(bookingId, idx){
 /* ---------- booking detail ---------- */
 function openBooking(id){ const b=state.bookings.find(x=>bid(x)===id); if(!b)return; state.current=id;
   document.getElementById('searchView').classList.add('hidden');
-  const d=document.getElementById('detailView'); d.classList.remove('hidden'); renderDetail(b); window.scrollTo(0,0); }
+  const d=document.getElementById('detailView'); d.classList.remove('hidden'); renderDetail(b); window.scrollTo(0,0);
+  loadDocsFor(id);
+}
+state.docsCache = state.docsCache || {};
+function loadDocsFor(bookingId){
+  if (state.docsCache[bookingId]){ renderDocsSection(bookingId); return; }
+  const el = document.getElementById('docsList');
+  if (el) el.innerHTML = '<div class="docempty">Loading documents…</div>';
+  DB.collection(COLL.attachments).where('bookingId','==',bookingId).get().then(snap=>{
+    state.docsCache[bookingId] = snap.docs.map(d=>d.data());
+    if (state.current===bookingId) renderDocsSection(bookingId);
+  }).catch(e=>{
+    console.error('Could not load documents', e);
+    if (el) el.innerHTML = '<div class="docempty">Could not load documents — check your connection.</div>';
+  });
+}
+function renderDocsSection(bookingId){
+  const el = document.getElementById('docsList');
+  if (!el) return;
+  const docs = (state.docsCache[bookingId]||[]).slice().sort((a,z)=>(z.ts||'').localeCompare(a.ts||''));
+  const b = state.bookings.find(x=>bid(x)===bookingId);
+  const comps = b ? (b.components||[]) : [];
+  el.innerHTML = docs.map(a=>{
+    const compLabel = (a.compIdx!=null && a.compIdx>=0 && comps[a.compIdx]) ? (comps[a.compIdx].activity||comps[a.compIdx].service||'Component') : 'Booking-level';
+    const kb = a.size ? Math.round(a.size/1024)+' KB' : '';
+    return `<div class="doc">
+      <div class="dinfo"><div class="dname">${esc(a.name||'Document')}</div>
+      <div class="dmeta">${esc(compLabel)}${kb?' · '+kb:''}${a.by?' · '+esc(a.by):''}</div></div>
+      <button class="dopen" onclick="openDoc('${a.id}','${bookingId}')">Open</button>
+    </div>`;
+  }).join('') || '<div class="docempty">No documents attached to this booking yet.</div>';
+}
+/* Opens a voucher/document straight from Firestore — images and PDFs render
+   inline in a new tab (the quickest way to check a voucher on the go);
+   anything else downloads instead, since mobile browsers can't preview it. */
+function openDoc(attId, bookingId){
+  const docs = state.docsCache[bookingId]||[];
+  const a = docs.find(x=>x.id===attId);
+  if (!a || !a.data){ toast('Could not open this document'); return; }
+  if ((a.type||'').startsWith('image/') || a.type==='application/pdf'){
+    const w = window.open();
+    if (w) w.location = a.data;
+    else toast('Enable pop-ups to view documents');
+  } else {
+    const link = document.createElement('a');
+    link.href = a.data; link.download = a.name||'document';
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  }
+}
 function backToSearch(){ state.current=null; document.getElementById('detailView').classList.add('hidden');
   document.getElementById('searchView').classList.remove('hidden'); }
 
@@ -435,6 +490,9 @@ function renderDetail(b){
 
     <h3 class="sh">Components &amp; status</h3>
     ${compHtml||'<div style="color:var(--muted)">No components.</div>'}
+
+    <h3 class="sh">Documents</h3>
+    <div id="docsList"><div class="docempty">Loading documents…</div></div>
 
     <h3 class="sh">Notes &amp; tasks</h3>
     <div class="addpanel">
