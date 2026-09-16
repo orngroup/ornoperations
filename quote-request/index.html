@@ -673,9 +673,11 @@ function doSignIn(){
   const btn = document.getElementById('siBtn'); btn.disabled = true; btn.textContent = 'Signing in…';
   firebase.auth().signInWithEmailAndPassword(email, pw).catch(e=>{
     btn.disabled = false; btn.textContent = 'Sign in';
+    console.error('Sign in failed:', e.code, e.message);
     if (e.code==='auth/wrong-password'){ err.textContent = 'Incorrect password.'; }
     else if (e.code==='auth/user-not-found' || e.code==='auth/invalid-credential'){ err.textContent = "No account with that email — use \"Create account\" above."; }
-    else { err.textContent = 'Could not sign in — please try again.'; }
+    else if (e.code==='auth/operation-not-allowed'){ err.textContent = 'Accounts are not switched on yet for this site — please tell Ajay.'; }
+    else { err.textContent = 'Could not sign in: '+(e.code||'unknown error'); }
   });
 }
 function doForgotPassword(){
@@ -712,9 +714,12 @@ function doCreateAccount(){
     }).catch(e=>console.error('Could not save profile', e));
   }).catch(e=>{
     btn.disabled = false; btn.textContent = 'Create account & continue';
+    console.error('Account creation failed:', e.code, e.message);
     if (e.code==='auth/email-already-in-use'){ err.textContent = 'An account already exists for that email — use "Sign in" above.'; }
     else if (e.code==='auth/weak-password'){ err.textContent = 'Please choose a stronger password.'; }
-    else { err.textContent = 'Could not create the account — please try again.'; }
+    else if (e.code==='auth/operation-not-allowed'){ err.textContent = 'Accounts are not switched on yet for this site (Email/Password sign-in needs enabling in Firebase — Authentication → Sign-in method). Please tell Ajay.'; }
+    else if (e.code==='auth/unauthorized-domain'){ err.textContent = "This website isn't yet authorised for accounts (Firebase → Authentication → Settings → Authorized domains needs orngroup.github.io added). Please tell Ajay."; }
+    else { err.textContent = 'Could not create the account: '+(e.code||'unknown error')+' — '+(e.message||'please try again, or tell Ajay this exact error.'); }
   });
 }
 function doAcctLogout(){ firebase.auth().signOut(); }
