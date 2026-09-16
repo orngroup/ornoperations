@@ -5287,6 +5287,17 @@ function renderSettings(){
         </div>
         <div class="hint">Adds "Open in Slack" buttons to the dashboard banner, Messages and Guest chats so the team jumps straight into the right channel. In Slack: right-click the channel name → Copy → Copy link.</div>
         <div class="section-lbl">Quote request email alerts (EmailJS)</div>
+        ${(()=>{
+          const ej = (state.notify&&state.notify.emailjs)||{};
+          const missing = [];
+          if (!ej.serviceId) missing.push('Service ID');
+          if (!ej.publicKey) missing.push('Public Key');
+          if (!ej.templateId) missing.push('team alert Template ID');
+          if (!ej.ackTemplateId) missing.push('acknowledgment Template ID');
+          return missing.length
+            ? `<div class="hint" style="background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;color:var(--text)">⚠ Not fully configured — missing: ${missing.join(', ')}. No acknowledgment emails will send until all four fields below are filled in and saved.</div>`
+            : `<div class="hint" style="background:var(--gold-bg);border:1px solid var(--ok);border-radius:8px;padding:8px 12px;margin-bottom:8px;color:var(--text)">✅ All four fields are filled in. <button class="btn ghost small" style="margin-left:8px" onclick="sendTestAckEmail()">Send test email</button></div>`;
+        })()}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           <input id="ejService" style="flex:1;min-width:180px" placeholder="EmailJS Service ID" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.serviceId)||'')}" ${isAdmin?'':'disabled'}>
           <input id="ejTemplate" style="flex:1;min-width:180px" placeholder="EmailJS Template ID (team alert)" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.templateId)||'')}" ${isAdmin?'':'disabled'}>
@@ -5436,6 +5447,26 @@ function saveEmailJs(){
   state.notify.categorySla = categorySla;
   saveNotify();
   toast('Request routing settings saved');
+}
+/* Sends a real test email through the acknowledgment template, so the
+   configuration can be verified directly from Settings rather than waiting
+   on (or guessing about) a real form submission. */
+function sendTestAckEmail(){
+  const ej = (state.notify&&state.notify.emailjs)||{};
+  if (!ej.serviceId || !ej.ackTemplateId || !ej.publicKey){ alert('Fill in and save all four EmailJS fields first.'); return; }
+  const to = prompt('Send a test acknowledgment email to:', state.user&&state.user.email || '');
+  if (!to) return;
+  if (!window.emailjs){ alert('EmailJS script has not loaded — check your connection and reload.'); return; }
+  window.emailjs.send(ej.serviceId, ej.ackTemplateId, {
+    to_email: to, client_name: 'Test', ref: 'QT-TEST01', category: 'New quote',
+    expected_by: new Date(Date.now()+48*3600000).toLocaleString('en-GB', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'}),
+    track_url: 'https://orngroup.github.io/ornoperations/quote-request/track/?ref=QT-TEST01'
+  }, ej.publicKey).then(()=>{
+    toast('Test email sent to '+to+' — check the inbox (and spam folder)');
+  }).catch(e=>{
+    console.error('Test email failed', e);
+    alert('Test email failed to send: '+(e&&e.text?e.text:JSON.stringify(e))+'\n\nThis usually means the EmailJS Service ID, Template ID or Public Key is wrong, or the EmailJS account/template itself has an issue — check the EmailJS dashboard.');
+  });
 }
 
 
