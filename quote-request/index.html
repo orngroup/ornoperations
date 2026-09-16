@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -63,6 +64,21 @@ textarea{min-height:80px;resize:vertical}
 .countdown .lbl{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:#5f6880;font-weight:700;margin-bottom:6px}
 .countdown .clock{font-size:22px;font-weight:800;color:#c8102e;letter-spacing:.5px}
 .countdown .by{font-size:11px;color:#5f6880;margin-top:6px}
+
+.account-box{background:#fdecec;border:1px solid #c8102e;border-radius:10px;padding:16px 18px;margin:16px 0;text-align:left}
+.acct-tabs{display:flex;gap:4px;background:#f4f6fa;padding:4px;border-radius:9px;margin-bottom:18px}
+.acct-tab-btn{flex:1;background:none;border:none;padding:9px;font-family:inherit;font-size:12.5px;font-weight:700;color:#5f6880;cursor:pointer;border-radius:6px}
+.acct-tab-btn.active{background:#c8102e;color:#fff}
+.loggedin-bar{display:flex;justify-content:space-between;align-items:center;background:#f4f6fa;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:12.5px;color:#5f6880}
+.loggedin-bar b{color:#1d2433}
+.loggedin-bar a{color:#c8102e;font-weight:700;cursor:pointer;text-decoration:none}
+.loggedin-bar a:hover{text-decoration:underline}
+.account-box h3{font-size:13px;color:#c8102e;margin-bottom:6px}
+.account-box p{font-size:12.5px;color:#1d2433;line-height:1.6;margin-bottom:8px}
+.account-box .pwbox{background:#fff;border:1px dashed #c8102e;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:15px;font-weight:700;color:#1d2433;display:inline-block;margin-bottom:8px}
+.account-box input{margin-bottom:6px}
+.account-box .btn{width:100%;margin-top:6px;font-size:13px;padding:10px}
+.account-box .setpw-err{color:#c8102e;font-size:11.5px;min-height:14px}
 
 /* Product & Supply tab */
 .section-title{color:#fff;font-size:19px;font-weight:800;margin:0 0 4px}
@@ -153,7 +169,47 @@ textarea{min-height:80px;resize:vertical}
 
   <!-- ===== TAB 1: CONTACT ORN EUROPE ===== -->
   <div class="page-panel active" id="panelContact">
-    <div class="card" id="formCard" style="max-width:760px;margin:0 auto">
+    <div class="card" id="acctGate" style="max-width:760px;margin:0 auto">
+      <h1>Log in to send a request</h1>
+      <div class="lead">A free account lets you track every request you send us in one place, with live status and countdowns — set your own password, no need to remember a temporary one.</div>
+      <div class="acct-tabs">
+        <button class="acct-tab-btn active" id="acctTabSignin" onclick="switchAcctTab('signin')">Sign in</button>
+        <button class="acct-tab-btn" id="acctTabCreate" onclick="switchAcctTab('create')">Create account</button>
+      </div>
+
+      <div id="acctSigninPanel">
+        <label>Email *</label><input id="siEmail" type="email" placeholder="you@company.com">
+        <label>Password *</label><input id="siPw" type="password" placeholder="Your password">
+        <div class="err" id="siErr"></div>
+        <button class="btn wide" id="siBtn" onclick="doSignIn()">Sign in</button>
+        <div style="text-align:center;margin-top:10px;font-size:12.5px"><a onclick="doForgotPassword()" style="color:#c8102e;font-weight:700;cursor:pointer">Forgot your password?</a></div>
+      </div>
+
+      <div id="acctCreatePanel" class="hidden">
+        <div class="row2">
+          <div><label>Full name *</label><input id="crName" placeholder="e.g. Jackie Smith"></div>
+          <div><label>Email *</label><input id="crEmail" type="email" placeholder="you@company.com"></div>
+        </div>
+        <div class="row2">
+          <div><label>Phone</label><input id="crPhone" placeholder="e.g. +44 7700 900000"></div>
+          <div><label>Position / role</label><input id="crPosition" placeholder="e.g. Travel Consultant"></div>
+        </div>
+        <div class="row2">
+          <div><label>Company / agency</label><input id="crCompany" placeholder="e.g. TAG USA, Best in Travel"></div>
+          <div><label>Location</label><input id="crLocation" placeholder="e.g. Seattle, USA"></div>
+        </div>
+        <div class="row2">
+          <div><label>Password *</label><input id="crPw" type="password" placeholder="Choose a password (min. 6 characters)"></div>
+          <div><label>Confirm password *</label><input id="crPw2" type="password" placeholder="Same password again"></div>
+        </div>
+        <div class="err" id="crErr"></div>
+        <button class="btn wide" id="crBtn" onclick="doCreateAccount()">Create account &amp; continue</button>
+      </div>
+      <div class="hint">You can still browse Product &amp; Supply and SLA info without an account — this is only needed to submit a request.</div>
+    </div>
+
+    <div class="card hidden" id="formCard" style="max-width:760px;margin:0 auto">
+      <div class="loggedin-bar"><span>Logged in as <b id="loggedInAs"></b></span><a onclick="doAcctLogout()">Log out</a></div>
       <h1>Send a request</h1>
       <div class="lead">One form for everything — pick the type of request below and it goes straight to the right team, tracked from submission through to resolution. No more email or WhatsApp.</div>
 
@@ -239,7 +295,7 @@ textarea{min-height:80px;resize:vertical}
       <div class="ref" id="okRef"></div>
       <p>The Europe team has it now and will come back to you at <b id="okEmail"></b>.</p>
       <div class="countdown" id="okCountdown"></div>
-      <div class="hint" style="margin-top:0"><a id="okTrackLink" href="#" style="color:#c8102e;font-weight:700">Bookmark this link to check your status any time →</a></div>
+      <div class="hint" style="margin-top:0"><a href="track/" style="color:#c8102e;font-weight:700">View this and all your requests in your dashboard →</a></div>
       <button class="btn wide" onclick="location.reload()">Submit another request</button>
     </div>
   </div>
@@ -597,7 +653,92 @@ function sendAcknowledgment({ref, name, toEmail, category, deadline}){
   }).catch(e=>console.error('Could not load notify settings for acknowledgment email', e));
 }
 
-/* ============== SUBMIT ============== */
+/* ============== ACCOUNT GATE (Firebase Auth) ==============
+   Logging in (or creating an account, with a password they choose
+   themselves) is required before sending a request, so every ticket is
+   tied to a real account from the start — no relying on a one-time
+   password screen or working email to get back in later. */
+function switchAcctTab(which){
+  document.getElementById('acctTabSignin').classList.toggle('active', which==='signin');
+  document.getElementById('acctTabCreate').classList.toggle('active', which==='create');
+  document.getElementById('acctSigninPanel').classList.toggle('hidden', which!=='signin');
+  document.getElementById('acctCreatePanel').classList.toggle('hidden', which!=='create');
+}
+function doSignIn(){
+  const err = document.getElementById('siErr'); err.textContent = ''; err.style.color = '#c8102e';
+  const email = document.getElementById('siEmail').value.trim();
+  const pw = document.getElementById('siPw').value;
+  if (!email || !pw){ err.textContent = 'Please enter your email and password.'; return; }
+  if (!FIRE || !window.firebase || !firebase.auth){ err.textContent = 'Cannot reach the ORN system right now — please try again shortly.'; return; }
+  const btn = document.getElementById('siBtn'); btn.disabled = true; btn.textContent = 'Signing in…';
+  firebase.auth().signInWithEmailAndPassword(email, pw).catch(e=>{
+    btn.disabled = false; btn.textContent = 'Sign in';
+    if (e.code==='auth/wrong-password'){ err.textContent = 'Incorrect password.'; }
+    else if (e.code==='auth/user-not-found' || e.code==='auth/invalid-credential'){ err.textContent = "No account with that email — use \"Create account\" above."; }
+    else { err.textContent = 'Could not sign in — please try again.'; }
+  });
+}
+function doForgotPassword(){
+  const email = document.getElementById('siEmail').value.trim() || prompt('Enter your email:');
+  if (!email) return;
+  const err = document.getElementById('siErr');
+  firebase.auth().sendPasswordResetEmail(email).then(()=>{
+    err.style.color = '#2c9e51';
+    err.textContent = 'Password reset email sent — check your inbox (and spam folder).';
+  }).catch(()=>{
+    err.style.color = '#c8102e';
+    err.textContent = 'Could not send reset email — check the address is correct.';
+  });
+}
+function doCreateAccount(){
+  const err = document.getElementById('crErr'); err.textContent = '';
+  const name = document.getElementById('crName').value.trim();
+  const email = document.getElementById('crEmail').value.trim();
+  const phone = document.getElementById('crPhone').value.trim();
+  const position = document.getElementById('crPosition').value.trim();
+  const company = document.getElementById('crCompany').value.trim();
+  const location = document.getElementById('crLocation').value.trim();
+  const pw = document.getElementById('crPw').value;
+  const pw2 = document.getElementById('crPw2').value;
+  if (!name || !email){ err.textContent = 'Please fill in your name and email.'; return; }
+  if (!/\S+@\S+\.\S+/.test(email)){ err.textContent = 'Please enter a valid email address.'; return; }
+  if (pw.length < 6){ err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pw !== pw2){ err.textContent = 'Passwords do not match.'; return; }
+  if (!FIRE || !window.firebase || !firebase.auth){ err.textContent = 'Cannot reach the ORN system right now — please try again shortly.'; return; }
+  const btn = document.getElementById('crBtn'); btn.disabled = true; btn.textContent = 'Creating account…';
+  firebase.auth().createUserWithEmailAndPassword(email, pw).then(cred=>{
+    DB.collection('recon_customers').doc(cred.user.uid).set({
+      uid: cred.user.uid, name, email, phone, position, company, location, createdAt: new Date().toISOString()
+    }).catch(e=>console.error('Could not save profile', e));
+  }).catch(e=>{
+    btn.disabled = false; btn.textContent = 'Create account & continue';
+    if (e.code==='auth/email-already-in-use'){ err.textContent = 'An account already exists for that email — use "Sign in" above.'; }
+    else if (e.code==='auth/weak-password'){ err.textContent = 'Please choose a stronger password.'; }
+    else { err.textContent = 'Could not create the account — please try again.'; }
+  });
+}
+function doAcctLogout(){ firebase.auth().signOut(); }
+function prefillFromProfile(user){
+  document.getElementById('fEmail').value = user.email || '';
+  DB.collection('recon_customers').doc(user.uid).get().then(d=>{
+    if (!d.exists) return;
+    const p = d.data();
+    if (p.name) document.getElementById('fName').value = p.name;
+    if (p.phone) document.getElementById('fPhone').value = p.phone;
+    if (p.company) document.getElementById('fAgency').value = p.company;
+  }).catch(e=>console.error(e));
+}
+if (FIRE && window.firebase && firebase.auth){
+  firebase.auth().onAuthStateChanged(user=>{
+    document.getElementById('acctGate').classList.toggle('hidden', !!user);
+    document.getElementById('formCard').classList.toggle('hidden', !user);
+    if (user){
+      document.getElementById('loggedInAs').textContent = user.email;
+      prefillFromProfile(user);
+    }
+  });
+}
+
 function submitRequest(){
   const err = document.getElementById('fErr');
   err.textContent = '';
@@ -649,18 +790,18 @@ function submitRequest(){
   }
 
   if (!FIRE){ err.textContent='Cannot reach the ORN system right now (network issue). Please email the Europe team instead, or retry shortly.'; return; }
+  const currentUser = firebase.auth().currentUser;
+  if (!currentUser){ err.textContent='Your session has expired — please sign in again.'; document.getElementById('acctGate').classList.remove('hidden'); document.getElementById('formCard').classList.add('hidden'); return; }
   const btn = document.getElementById('fSubmit');
   btn.disabled = true; btn.textContent = 'Submitting…';
   const ref = 'QT-' + Date.now().toString(36).toUpperCase().slice(-6);
   const id = 'qt' + Date.now() + Math.random().toString(36).slice(2,6);
-  const q = { id, ref, ts:new Date().toISOString(), status:'New', internalNotes:'', alerted:false, ...payload };
+  const q = { id, ref, ts:new Date().toISOString(), status:'New', internalNotes:'', alerted:false, ownerUid: currentUser.uid, ...payload };
   DB.collection('recon_quotes').doc(id).set(q).then(()=>{
     document.getElementById('formCard').style.display='none';
     document.getElementById('okRef').textContent = ref;
     document.getElementById('okEmail').textContent = replyEmail || email;
     document.getElementById('okCard').style.display='block';
-    const okLink = document.getElementById('okTrackLink');
-    if (okLink) okLink.href = trackingUrl(ref);
     const catLabel = (CATEGORY_LABELS[category]||category);
     const slaHours = computeSlaHours(category, urgency, payload.departureDate);
     const deadline = Date.now() + slaHours*3600*1000;

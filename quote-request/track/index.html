@@ -3,68 +3,104 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ORN Europe — Track Your Request</title>
+<title>ORN Europe — Your Requests</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;color:#1d2433;
   background:linear-gradient(160deg,#0b0d12 0%,#1a2233 55%,#2d4468 100%);
   display:flex;align-items:flex-start;justify-content:center;padding:40px 16px}
-.wrap{width:min(560px,100%)}
-.brand-bar{background:#c8102e;border-radius:14px 14px 0 0;padding:16px 26px}
+.wrap{width:min(640px,100%)}
+.brand-bar{background:#c8102e;border-radius:14px 14px 0 0;padding:16px 26px;display:flex;justify-content:space-between;align-items:center}
 .brand-bar .orn{color:#fff;font-weight:800;font-size:20px;letter-spacing:4px}
 .brand-bar .sub{color:#ffe3e3;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;opacity:.9;margin-top:2px}
+.brand-bar .logout{background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:7px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer}
 .card{background:#fff;border-radius:0 0 14px 14px;padding:30px 32px;box-shadow:0 20px 54px rgba(4,7,13,.5)}
 h1{font-size:19px;font-weight:800;margin-bottom:4px}
 .lead{color:#5f6880;font-size:12.5px;margin-bottom:18px}
-label{display:block;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#5f6880;font-weight:700;margin-bottom:6px}
+label{display:block;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#5f6880;font-weight:700;margin-bottom:6px;margin-top:12px}
 input{width:100%;font-family:inherit;font-size:14px;border:1px solid #d5dae3;border-radius:8px;padding:11px 13px;outline:none}
 input:focus{border-color:#c8102e}
 .btn{margin-top:14px;width:100%;background:#c8102e;color:#fff;border:none;border-radius:8px;padding:13px;font-weight:800;font-size:14px;cursor:pointer}
 .btn:hover{filter:brightness(1.08)}
 .btn:disabled{opacity:.5;cursor:wait}
+.btn.ghost{background:#fff;color:#c8102e;border:1.5px solid #c8102e}
 .err{color:#c8102e;font-size:12.5px;min-height:16px;margin-top:8px}
 .hidden{display:none !important}
+.linkrow{text-align:center;margin-top:14px;font-size:12.5px}
+.linkrow a{color:#c8102e;font-weight:700;text-decoration:none;cursor:pointer}
+.linkrow a:hover{text-decoration:underline}
+
+.ticket{border:1px solid #e6e9ef;border-radius:12px;padding:16px 18px;margin-bottom:12px}
+.ticket-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+.ticket-ref{font-family:monospace;font-weight:800;font-size:13px;color:#1d2433}
+.ticket-cat{font-size:11.5px;color:#5f6880;margin-top:2px}
+.status-badge{display:inline-block;padding:5px 12px;border-radius:16px;font-weight:800;font-size:11px;color:#fff;white-space:nowrap}
+.ticket-countdown{background:#f4f6fa;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:12.5px}
+.ticket-countdown b{color:#c8102e}
+.ticket-update{background:#fdecec;border-left:3px solid #c8102e;border-radius:6px;padding:9px 12px;font-size:12.5px;color:#1d2433;line-height:1.5;margin-top:6px}
+.ticket-no-update{color:#9aa2b5;font-style:italic;font-size:12px;margin-top:6px}
+.ticket-meta{font-size:11px;color:#9aa2b5;margin-top:8px}
+
 .result{margin-top:22px;border-top:1px solid #eceff4;padding-top:20px}
-.status-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-weight:800;font-size:12.5px;color:#fff;margin-bottom:14px}
-.countdown-box{background:#f4f6fa;border-radius:10px;padding:16px;margin-bottom:18px;text-align:center}
-.countdown-box .lbl{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#5f6880;font-weight:700}
-.countdown-box .clock{font-size:22px;font-weight:800;color:#c8102e;margin:4px 0 2px}
-.countdown-box .by{font-size:11px;color:#5f6880}
-.countdown-box.done .clock{color:#2c9e51}
 .field{margin-bottom:14px}
 .field .l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#9aa2b5;font-weight:700}
 .field .v{font-size:14px;color:#1d2433;margin-top:2px}
-.update-box{background:#f4f6fa;border-left:3px solid #c8102e;border-radius:6px;padding:12px 14px;margin-top:4px;font-size:13px;color:#1d2433;line-height:1.6}
-.no-update{color:#9aa2b5;font-style:italic;font-size:12.5px}
 .hint{color:#9aa2b5;font-size:11px;margin-top:18px;text-align:center}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="brand-bar"><div class="orn">ORN</div><div class="sub">Europe · Track Your Request</div></div>
-  <div class="card">
-    <h1>Track your request</h1>
+  <div class="brand-bar">
+    <div><div class="orn">ORN</div><div class="sub">Europe · Your Requests</div></div>
+    <button class="logout hidden" id="logoutBtn" onclick="doLogout()">Log out</button>
+  </div>
+
+  <!-- ===== LOGIN ===== -->
+  <div class="card" id="loginCard">
+    <h1>Log in to your account</h1>
+    <div class="lead">See every request you've submitted, its status, and a live countdown — all in one place.</div>
+    <label>Email</label>
+    <input id="loginEmail" type="email" placeholder="you@company.com">
+    <label>Password</label>
+    <input id="loginPw" type="password" placeholder="Your password">
+    <div class="err" id="loginErr"></div>
+    <button class="btn" id="loginBtn" onclick="doLogin()">Log in</button>
+    <div class="linkrow"><a onclick="doForgotPassword()">Forgot your password?</a></div>
+    <div class="linkrow"><a onclick="toggleLookup()">Just have a reference number? Look it up without logging in →</a></div>
+    <div class="hint">Your account was created automatically the first time you submitted a request — use the same email, and check "Forgot password" if you don't have the temporary one anymore.</div>
+  </div>
+
+  <!-- ===== DASHBOARD ===== -->
+  <div class="card hidden" id="dashCard">
+    <h1>Your requests</h1>
+    <div class="lead" id="dashLead"></div>
+    <div id="ticketList"></div>
+  </div>
+
+  <!-- ===== FALLBACK: LOOK UP BY REFERENCE, NO LOGIN ===== -->
+  <div class="card hidden" id="lookupCard">
+    <h1>Track by reference</h1>
     <div class="lead">Enter the reference you were given when you submitted your request.</div>
     <label>Reference</label>
     <input id="fRef" placeholder="e.g. QT-4F8K2X">
     <button class="btn" id="fSubmit" onclick="lookup()">Check status</button>
     <div class="err" id="fErr"></div>
+    <div class="linkrow"><a onclick="toggleLookup()">← Back to login</a></div>
 
     <div class="result hidden" id="result">
       <span class="status-badge" id="statusBadge"></span>
-      <div class="countdown-box" id="rCountdown"></div>
+      <div class="ticket-countdown" id="rCountdown"></div>
       <div class="field"><div class="l">Request type</div><div class="v" id="rCategory"></div></div>
       <div class="field"><div class="l">Submitted</div><div class="v" id="rSubmitted"></div></div>
-      <div class="field" id="rDepartureField"><div class="l">Travel date</div><div class="v" id="rDeparture"></div></div>
-      <div class="field"><div class="l">Latest update from the team</div>
-        <div class="update-box" id="rUpdate"></div>
-      </div>
+      <div class="field hidden" id="rDepartureField"><div class="l">Travel date</div><div class="v" id="rDeparture"></div></div>
+      <div class="field"><div class="l">Latest update from the team</div><div id="rUpdate"></div></div>
     </div>
-    <div class="hint">This page only shows status and any update the team has left for you — no pricing or internal details.</div>
+    <div class="hint">This only shows status and any update the team has left for you — no pricing or internal details.</div>
   </div>
 </div>
 
@@ -101,37 +137,123 @@ function requestSlaHours(q){
   }
   return CATEGORY_SLA_DEFAULT[q.category] || 48;
 }
-let countdownTimer = null;
-function startCountdown(deadlineMs, isClosed){
-  const el = document.getElementById('rCountdown');
-  if (!el) return;
-  if (countdownTimer) clearInterval(countdownTimer);
-  if (isClosed){
-    el.classList.add('done');
-    el.innerHTML = `<div class="lbl">This request is closed</div><div class="clock">✓</div>`;
-    return;
-  }
-  const byStr = new Date(deadlineMs).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
-  function tick(){
-    const msLeft = deadlineMs - Date.now();
-    if (msLeft <= 0){
-      el.innerHTML = `<div class="lbl">Response target</div><div class="clock">Due now</div><div class="by">Expected by ${byStr}</div>`;
-      clearInterval(countdownTimer);
-      return;
-    }
-    const h = Math.floor(msLeft/3600000);
-    const m = Math.floor((msLeft%3600000)/60000);
-    const s = Math.floor((msLeft%60000)/1000);
-    const clockStr = h>0 ? `${h}h ${m}m` : `${m}m ${s}s`;
-    el.innerHTML = `<div class="lbl">We'll be in touch within</div><div class="clock">${clockStr}</div><div class="by">Expected by ${byStr}</div>`;
-  }
-  tick();
-  countdownTimer = setInterval(tick, 1000);
-}
-
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-// This lookup is READ-ONLY — it never writes, updates, or deletes anything.
+/* ============== LOGIN / ACCOUNT ============== */
+let dashboardTimer = null;
+
+function showCard(name){
+  ['loginCard','dashCard','lookupCard'].forEach(id=>{
+    document.getElementById(id).classList.toggle('hidden', id!==name);
+  });
+  document.getElementById('logoutBtn').classList.toggle('hidden', name!=='dashCard');
+}
+function toggleLookup(){
+  const showingLookup = !document.getElementById('lookupCard').classList.contains('hidden');
+  showCard(showingLookup ? 'loginCard' : 'lookupCard');
+}
+function doLogin(){
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  if (!email || !pw){ err.textContent = 'Please enter your email and password.'; return; }
+  if (!FIRE || !window.firebase || !firebase.auth){ err.textContent = 'Cannot reach the ORN system right now — please try again shortly.'; return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Logging in…';
+  firebase.auth().signInWithEmailAndPassword(email, pw).catch(e=>{
+    btn.disabled = false; btn.textContent = 'Log in';
+    if (e.code==='auth/user-not-found' || e.code==='auth/invalid-credential'){
+      err.textContent = "We don't recognise that email/password — check it, or use \"Forgot your password?\" below. If you haven't submitted a request yet, you won't have an account.";
+    } else if (e.code==='auth/wrong-password'){
+      err.textContent = 'Incorrect password — try again, or use "Forgot your password?" below.';
+    } else {
+      err.textContent = 'Could not log in — please try again.';
+    }
+  });
+}
+function doForgotPassword(){
+  const email = document.getElementById('loginEmail').value.trim() || prompt('Enter the email you used to submit your request:');
+  if (!email) return;
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  firebase.auth().sendPasswordResetEmail(email).then(()=>{
+    err.style.color = '#2c9e51';
+    err.textContent = 'Password reset email sent — check your inbox (and spam folder).';
+  }).catch(e=>{
+    err.style.color = '#c8102e';
+    err.textContent = 'Could not send reset email — check the address is correct.';
+  });
+}
+function doLogout(){
+  firebase.auth().signOut();
+}
+
+/* ============== DASHBOARD: all of this account's tickets ============== */
+function loadMyTickets(user){
+  document.getElementById('dashLead').textContent = 'Logged in as ' + user.email;
+  // ownerUid is the reliable match (set on every request submitted since
+  // login became required); email/replyEmail matching is kept as a
+  // fallback so nothing submitted before that change goes missing.
+  const byUid = DB.collection('recon_quotes').where('ownerUid','==',user.uid).get();
+  const byEmail = DB.collection('recon_quotes').where('email','==',user.email).get();
+  const byReply = DB.collection('recon_quotes').where('replyEmail','==',user.email).get();
+  Promise.all([byUid, byEmail, byReply]).then(([s0, s1, s2])=>{
+    const map = {};
+    s0.docs.forEach(d=>map[d.id]=d.data());
+    s1.docs.forEach(d=>map[d.id]=d.data());
+    s2.docs.forEach(d=>map[d.id]=d.data());
+    const tickets = Object.values(map).sort((a,z)=>(z.ts||'').localeCompare(a.ts||''));
+    renderTicketList(tickets);
+  }).catch(e=>{
+    console.error(e);
+    document.getElementById('ticketList').innerHTML = '<div class="err">Could not load your requests — please try again.</div>';
+  });
+}
+function renderTicketList(tickets){
+  const el = document.getElementById('ticketList');
+  if (!tickets.length){ el.innerHTML = '<p class="lead">No requests found on this account yet.</p>'; return; }
+  el.innerHTML = tickets.map((q,i)=>{
+    const status = q.status || 'New';
+    const closed = status==='Won' || status==='Lost';
+    const submitted = q.ts ? new Date(q.ts).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : '—';
+    return `<div class="ticket">
+      <div class="ticket-top">
+        <div><div class="ticket-ref">${esc(q.ref||q.id)}</div><div class="ticket-cat">${esc(CATEGORY_LABELS[q.category]||q.category||'')}${q.departureDate?' · travel '+new Date(q.departureDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):''}</div></div>
+        <span class="status-badge" style="background:${STATUS_COLORS[status]||'#5f6880'}">${esc(status)}</span>
+      </div>
+      <div class="ticket-countdown" id="tCountdown_${i}"></div>
+      ${q.clientUpdate && q.clientUpdate.trim()
+        ? `<div class="ticket-update">${esc(q.clientUpdate)}</div>`
+        : `<div class="ticket-no-update">No update posted yet.</div>`}
+      <div class="ticket-meta">Submitted ${submitted}</div>
+    </div>`;
+  }).join('');
+  tickets.forEach((q,i)=>{
+    const status = q.status || 'New';
+    const closed = status==='Won' || status==='Lost';
+    const deadline = q.ts ? new Date(q.ts).getTime() + requestSlaHours(q)*3600000 : null;
+    renderMiniCountdown('tCountdown_'+i, deadline, closed);
+  });
+}
+function renderMiniCountdown(elId, deadlineMs, isClosed){
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (isClosed || !deadlineMs){ el.innerHTML = 'This request is closed.'; return; }
+  function tick(){
+    const msLeft = deadlineMs - Date.now();
+    const byStr = new Date(deadlineMs).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+    if (msLeft <= 0){ el.innerHTML = 'Response due now — expected by <b>'+byStr+'</b>'; return; }
+    const h = Math.floor(msLeft/3600000), m = Math.floor((msLeft%3600000)/60000);
+    el.innerHTML = "We'll be in touch within <b>"+(h>0?h+'h '+m+'m':m+'m')+"</b> — by "+byStr;
+  }
+  tick();
+  setInterval(tick, 30000);
+}
+
+/* ============== FALLBACK: look up a single ticket by reference, no login ==============
+   READ-ONLY — never writes, updates, or deletes anything. */
+let countdownTimer = null;
 function lookup(){
   const err = document.getElementById('fErr');
   err.textContent = '';
@@ -139,60 +261,69 @@ function lookup(){
   const ref = document.getElementById('fRef').value.trim();
   if (!ref){ err.textContent = 'Please enter your reference.'; return; }
   if (!FIRE){ err.textContent = 'Cannot reach the ORN system right now — please try again shortly.'; return; }
-
   const btn = document.getElementById('fSubmit');
   btn.disabled = true; btn.textContent = 'Checking…';
-
   DB.collection('recon_quotes').where('ref', '==', ref).limit(1).get().then(snap=>{
     btn.disabled = false; btn.textContent = 'Check status';
-    if (snap.empty){
-      err.textContent = "We couldn't find a request with that reference. Please check it and try again.";
-      return;
-    }
-    const q = snap.docs[0].data();
-    renderResult(q);
+    if (snap.empty){ err.textContent = "We couldn't find a request with that reference. Please check it and try again."; return; }
+    renderResult(snap.docs[0].data());
   }).catch(e=>{
     console.error(e);
     btn.disabled = false; btn.textContent = 'Check status';
     err.textContent = 'Something went wrong looking that up — please try again.';
   });
 }
-
 function renderResult(q){
   const status = q.status || 'New';
   const badge = document.getElementById('statusBadge');
   badge.textContent = status;
   badge.style.background = STATUS_COLORS[status] || '#5f6880';
-
   document.getElementById('rCategory').textContent = CATEGORY_LABELS[q.category] || q.category || '—';
   document.getElementById('rSubmitted').textContent = q.ts ? new Date(q.ts).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
-
   const depField = document.getElementById('rDepartureField');
   if (q.departureDate){
     depField.classList.remove('hidden');
     document.getElementById('rDeparture').textContent = new Date(q.departureDate).toLocaleDateString('en-GB', {day:'numeric', month:'long', year:'numeric'});
-  } else {
-    depField.classList.add('hidden');
-  }
-
+  } else depField.classList.add('hidden');
   const updateEl = document.getElementById('rUpdate');
-  if (q.clientUpdate && q.clientUpdate.trim()){
-    updateEl.textContent = q.clientUpdate;
-    updateEl.classList.remove('no-update');
-  } else {
-    updateEl.innerHTML = '<span class="no-update">No update posted yet — the team will add one here as your request progresses.</span>';
-  }
-
+  if (q.clientUpdate && q.clientUpdate.trim()){ updateEl.textContent = q.clientUpdate; }
+  else { updateEl.innerHTML = '<span style="color:#9aa2b5;font-style:italic;font-size:12.5px">No update posted yet — the team will add one here as your request progresses.</span>'; }
+  const status_ = q.status||'New';
+  const closed = status_==='Won' || status_==='Lost';
+  const deadline = q.ts ? new Date(q.ts).getTime() + requestSlaHours(q)*3600000 : null;
+  startCountdown(deadline, closed);
   document.getElementById('result').classList.remove('hidden');
 }
+function startCountdown(deadlineMs, isClosed){
+  const el = document.getElementById('rCountdown');
+  if (!el) return;
+  if (countdownTimer) clearInterval(countdownTimer);
+  if (isClosed || !deadlineMs){ el.innerHTML = '<b>This request is closed.</b>'; return; }
+  function tick(){
+    const msLeft = deadlineMs - Date.now();
+    const byStr = new Date(deadlineMs).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+    if (msLeft <= 0){ el.innerHTML = 'Response due now — expected by <b>'+byStr+'</b>'; clearInterval(countdownTimer); return; }
+    const h = Math.floor(msLeft/3600000), m = Math.floor((msLeft%3600000)/60000), s = Math.floor((msLeft%60000)/1000);
+    el.innerHTML = "We'll be in touch within <b>"+(h>0?h+'h '+m+'m':m+'m '+s+'s')+"</b> — by "+byStr;
+  }
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
 
-// Support deep-linking from the acknowledgment email, e.g. ?ref=QT-4F8K2X
+/* ============== BOOT: auto-login if already signed in, else login screen ============== */
+if (FIRE && window.firebase && firebase.auth){
+  firebase.auth().onAuthStateChanged(user=>{
+    if (user){ showCard('dashCard'); loadMyTickets(user); }
+    else { showCard('loginCard'); }
+  });
+}
+// Support deep-linking from the acknowledgment email, e.g. ?ref=QT-4F8K2X —
+// goes straight to the no-login lookup for that one reference.
 (function(){
   const params = new URLSearchParams(location.search);
   const ref = params.get('ref');
   if (ref){
-    document.getElementById('fRef').value = ref;
-    lookup();
+    setTimeout(()=>{ showCard('lookupCard'); document.getElementById('fRef').value = ref; lookup(); }, 300);
   }
 })();
 </script>
