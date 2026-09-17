@@ -152,6 +152,24 @@ textarea{width:100%;min-height:70px;padding:12px;border:1px solid var(--line);bo
 .taskcard .trow .done{background:var(--okbg);color:var(--ok);border-color:#bfe6cd}
 .taskcard.doneState{opacity:.55}
 .taskcard.doneState .tt{text-decoration:line-through}
+.reqcard{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:12px;padding:13px;margin-bottom:10px;background:#fff}
+.reqcard.urg-crit{border-left-color:#cc3a24}
+.reqcard.urg-soon{border-left-color:var(--warn)}
+.reqcard.urg-ok{border-left-color:var(--ok)}
+.reqcard .rtop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px}
+.reqcard .rcat{font-size:10px;text-transform:uppercase;letter-spacing:.4px;font-weight:800;color:#fff;border-radius:6px;padding:2px 7px}
+.reqcard .rref{font-size:11px;color:var(--muted);font-family:monospace}
+.reqcard .rname{font-size:14px;font-weight:700;margin:4px 0 2px}
+.reqcard .rmeta{font-size:12px;color:var(--muted)}
+.reqcard .rtime{font-size:12px;font-weight:700;margin-top:6px}
+.reqcard .rtime.overdue{color:#cc3a24}
+.status-badge-r{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:800;color:#fff}
+.req-detail-hd{position:sticky;top:0;background:#fff;padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;z-index:5}
+.req-detail-hd button{background:none;border:none;font-size:22px;color:var(--ink);padding:0 4px}
+.req-body{padding:16px}
+.req-field{margin-bottom:14px}
+.req-field .l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px}
+.req-field .v{font-size:14px}
 </style>
 </head>
 <body>
@@ -195,6 +213,7 @@ textarea{width:100%;min-height:70px;padding:12px;border:1px solid var(--line);bo
     <div class="seg" style="margin-bottom:12px">
       <button id="tabSearch" class="on" onclick="setTab('search')">Search bookings</button>
       <button id="tabTasks" onclick="setTab('tasks')">My tasks <span id="taskCount" class="tcount"></span></button>
+      <button id="tabRequests" onclick="setTab('requests')">Requests <span id="requestCount" class="tcount"></span></button>
     </div>
 
     <div id="searchPane">
@@ -215,10 +234,21 @@ textarea{width:100%;min-height:70px;padding:12px;border:1px solid var(--line);bo
       <div class="search-hint">Open tasks you've flagged for yourself. Tap one to open the booking; mark done when actioned.</div>
       <div id="tasksList"></div>
     </div>
+
+    <div id="requestsPane" class="hidden">
+      <div class="search-hint">Quote and support requests submitted through the client portal — tap one to view and action it.</div>
+      <div class="seg" id="requestFilterSeg" style="margin-bottom:10px">
+        <button id="rfAll" class="on" onclick="setRequestFilter('')">All</button>
+        <button id="rfSales" onclick="setRequestFilter('sales')">Sales</button>
+        <button id="rfTickets" onclick="setRequestFilter('tickets')">Tickets</button>
+      </div>
+      <div id="requestsList"></div>
+    </div>
   </div>
 
   <!-- DETAIL -->
   <div id="detailView" class="detail hidden"></div>
+  <div id="requestDetailView" class="detail hidden"></div>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -234,9 +264,10 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "470679786970",
   appId: "1:470679786970:web:28945392beb13b9a2d5ce3"
 };
-const COLL = { bookings:'recon_bookings', activity:'recon_activity', users:'recon_users', attachments:'recon_attachments' };
+const COLL = { bookings:'recon_bookings', activity:'recon_activity', users:'recon_users', attachments:'recon_attachments', quotes:'recon_quotes' };
 let DB=null, FIRE=false;
-const state = { user:null, users: MOBILE_USERS.slice(), bookings:[], current:null };
+const state = { user:null, users: MOBILE_USERS.slice(), bookings:[], current:null, quotes:[], currentQuote:null };
+let seenQuoteIds = null; // null until first snapshot, so we never notify on the initial load
 
 function setNet(txt, live){
   ['netPill','netPill2'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.textContent=txt; e.className='status-pill '+(live?'live':'local'); } });
@@ -266,6 +297,18 @@ function initFirebase(){
       if(!document.getElementById('searchView').classList.contains('hidden')){ if(activeTab==='tasks') renderTasks(); else runSearch(); }
       updateTaskCount();
     }, err=>{ console.warn('bookings snapshot', err); setNet('Connection issue', false); });
+    // live requests (quotes/tickets) — drives the Requests tab and new-ticket alerts
+    DB.collection(COLL.quotes).onSnapshot(s=>{
+      const rows = s.docs.map(d=>d.data());
+      if (seenQuoteIds){
+        rows.forEach(q=>{ if(!seenQuoteIds.has(q.id)) notifyNewRequest(q); });
+      }
+      seenQuoteIds = new Set(rows.map(q=>q.id));
+      state.quotes = rows;
+      if (state.currentQuote){ const q=state.quotes.find(x=>x.id===state.currentQuote); if(q) renderRequestDetail(q); }
+      if(!document.getElementById('searchView').classList.contains('hidden') && activeTab==='requests') renderRequests();
+      updateRequestCount();
+    }, err=>console.warn('quotes snapshot', err));
   }catch(e){
     console.warn('firebase init failed', e);
     FIRE=false; setNet('Offline', false);
@@ -292,7 +335,7 @@ function doLogin(){
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('appView').classList.remove('hidden');
   document.getElementById('whoName').textContent = found.name.split(' ')[0];
-  runSearch(); updateTaskCount();
+  runSearch(); updateTaskCount(); updateRequestCount(); ensureNotifyPermission();
 }
 function doLogout(){
   state.user=null; state.current=null;
@@ -350,9 +393,12 @@ function setTab(tab){
   activeTab=tab;
   document.getElementById('tabSearch').classList.toggle('on', tab==='search');
   document.getElementById('tabTasks').classList.toggle('on', tab==='tasks');
+  document.getElementById('tabRequests').classList.toggle('on', tab==='requests');
   document.getElementById('searchPane').classList.toggle('hidden', tab!=='search');
   document.getElementById('tasksPane').classList.toggle('hidden', tab!=='tasks');
+  document.getElementById('requestsPane').classList.toggle('hidden', tab!=='requests');
   if(tab==='tasks') renderTasks();
+  if(tab==='requests') renderRequests();
 }
 // collect open tasks flagged for the current user across all bookings
 function myOpenTasks(){
@@ -394,6 +440,160 @@ function markTaskDone(bookingId, idx){
   persist(b,'Task marked done');
   renderTasks(); updateTaskCount(); toast('Task marked done');
 }
+
+/* ---------- requests (quote/support tickets from the client portal) ---------- */
+const REQUEST_CATEGORIES = {
+  new_quote:{label:'New quote', color:'#c9973e'}, quote:{label:'New quote', color:'#c9973e'},
+  quote_addon:{label:'Add-on quote', color:'#b8860b'}, group_quote:{label:'Group quote', color:'#8a6d1a'},
+  support:{label:'Booking admin', color:'#6b7280'}, customer:{label:'Customer', color:'#5b8def'},
+  escalation:{label:'Escalation', color:'#cc3a24'}, management:{label:'Mgmt escalation', color:'#8b1a3f'}
+};
+const SALES_CATS = ['new_quote','quote','quote_addon','group_quote'];
+const TICKET_CATS = ['support','customer','escalation','management'];
+const QUOTE_STATUSES = ['New','Working','Quoted','Sent','Won','Lost'];
+const SLA_HOURS_DEFAULT = {quote:48,new_quote:48,quote_addon:48,group_quote:48,support:48,customer:48,escalation:4,management:8};
+let requestFilter = '';
+function requestSlaHours(q){
+  if (q.slaOverrideHours!=null && q.slaOverrideHours!=='') return Number(q.slaOverrideHours);
+  if (q.urgency==='urgent') return 24;
+  if (SALES_CATS.includes(q.category) && q.departureDate){
+    const days = Math.round((new Date(q.departureDate) - new Date()) / 86400000);
+    if (days!=null && days > 60) return 72;
+  }
+  return SLA_HOURS_DEFAULT[q.category] || 48;
+}
+function requestTimeBand(q){
+  const closed = q.status==='Won' || q.status==='Lost';
+  if (closed) return {key:'done', label:'Closed', order:9, hoursLeft:null};
+  const deadline = q.ts ? new Date(q.ts).getTime() + requestSlaHours(q)*3600000 : null;
+  if (!deadline) return {key:'ok', label:'—', order:5, hoursLeft:null};
+  const hoursLeft = (deadline - Date.now())/3600000;
+  if (hoursLeft <= 0) return {key:'crit', label:'Overdue', order:0, hoursLeft};
+  if (hoursLeft <= 6) return {key:'crit', label:Math.round(hoursLeft)+'h left', order:1, hoursLeft};
+  if (hoursLeft <= 24) return {key:'soon', label:Math.round(hoursLeft)+'h left', order:2, hoursLeft};
+  return {key:'ok', label:Math.round(hoursLeft/24)+'d left', order:3, hoursLeft};
+}
+function setRequestFilter(f){
+  requestFilter = f;
+  document.getElementById('rfAll').classList.toggle('on', f==='');
+  document.getElementById('rfSales').classList.toggle('on', f==='sales');
+  document.getElementById('rfTickets').classList.toggle('on', f==='tickets');
+  renderRequests();
+}
+function updateRequestCount(){
+  const n = state.quotes.filter(q=>q.status!=='Won' && q.status!=='Lost' && requestTimeBand(q).key!=='ok').length;
+  const el = document.getElementById('requestCount');
+  if (el) el.textContent = n? n : '';
+}
+function renderRequests(){
+  const el = document.getElementById('requestsList');
+  if (!el) return;
+  let rows = state.quotes.slice();
+  if (requestFilter==='sales') rows = rows.filter(q=>SALES_CATS.includes(q.category));
+  else if (requestFilter==='tickets') rows = rows.filter(q=>TICKET_CATS.includes(q.category));
+  rows = rows.map(q=>({q, band:requestTimeBand(q)})).sort((a,z)=>a.band.order - z.band.order || (z.q.ts||'').localeCompare(a.q.ts||''));
+  if (!rows.length){ el.innerHTML = '<div class="empty">No requests in this view.</div>'; return; }
+  el.innerHTML = rows.map(({q,band})=>{
+    const cat = REQUEST_CATEGORIES[q.category] || {label:q.category||'Request', color:'#6b7280'};
+    return `<div class="reqcard urg-${band.key}" onclick="openRequest('${esc(q.id)}')">
+      <div class="rtop">
+        <span class="rcat" style="background:${cat.color}">${esc(cat.label)}</span>
+        <span class="status-badge-r" style="background:${statusColor(q.status)}">${esc(q.status||'New')}</span>
+      </div>
+      <div class="rref">${esc(q.ref||q.id)}</div>
+      <div class="rname">${esc(q.name||'')}</div>
+      <div class="rmeta">${esc((q.destination||q.subject||'').slice(0,60))}${q.departureDate?' · travel '+fmtDate(q.departureDate):''}</div>
+      <div class="rtime ${band.key==='crit'?'overdue':''}">${esc(band.label)}</div>
+    </div>`;
+  }).join('');
+}
+function statusColor(status){
+  return {New:'#5f6880', Working:'#c9973e', Quoted:'#5b8def', Sent:'#2c9e51', Won:'#2c9e51', Lost:'#9aa2b5'}[status] || '#5f6880';
+}
+
+function openRequest(id){
+  const q = state.quotes.find(x=>x.id===id); if(!q) return;
+  state.currentQuote = id;
+  document.getElementById('searchView').classList.add('hidden');
+  const d = document.getElementById('requestDetailView');
+  d.classList.remove('hidden');
+  renderRequestDetail(q);
+  window.scrollTo(0,0);
+}
+function backFromRequest(){
+  state.currentQuote = null;
+  document.getElementById('requestDetailView').classList.add('hidden');
+  document.getElementById('searchView').classList.remove('hidden');
+}
+function renderRequestDetail(q){
+  const d = document.getElementById('requestDetailView');
+  if (!d || d.classList.contains('hidden')) return;
+  const cat = REQUEST_CATEGORIES[q.category] || {label:q.category||'Request', color:'#6b7280'};
+  const band = requestTimeBand(q);
+  const comps = q.components || [];
+  d.innerHTML = `
+    <div class="req-detail-hd"><button onclick="backFromRequest()">←</button>
+      <div><div style="font-weight:800;font-size:15px">${esc(q.ref||q.id)}</div>
+      <span class="rcat" style="background:${cat.color}">${esc(cat.label)}</span></div>
+    </div>
+    <div class="req-body">
+      <div class="req-field"><div class="l">Status</div>
+        <select onchange="editRequest('${esc(q.id)}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select>
+      </div>
+      <div class="req-field"><div class="l">Time left</div><div class="v ${band.key==='crit'?'overdue':''}" style="${band.key==='crit'?'color:#cc3a24;font-weight:700':''}">${esc(band.label)}</div></div>
+      <div class="req-field"><div class="l">From</div><div class="v">${esc(q.name||'')} · ${esc(q.email||'')}${q.phone?' · '+esc(q.phone):''}</div></div>
+      ${q.agency?`<div class="req-field"><div class="l">Agency / company</div><div class="v">${esc(q.agency)}</div></div>`:''}
+      ${q.ornRef||q.tagRef?`<div class="req-field"><div class="l">Reference</div><div class="v">${esc(q.ornRef||'')} ${esc(q.tagRef||'')}</div></div>`:''}
+      ${q.departureDate?`<div class="req-field"><div class="l">Travel date</div><div class="v">${fmtDate(q.departureDate)}</div></div>`:''}
+      ${q.pax?`<div class="req-field"><div class="l">Pax</div><div class="v">${esc(q.pax)}${q.childAges?' ('+esc(q.childAges)+')':''}</div></div>`:''}
+      ${q.destination?`<div class="req-field"><div class="l">Destination</div><div class="v">${esc(q.destination)}</div></div>`:''}
+      ${q.subject?`<div class="req-field"><div class="l">Subject</div><div class="v">${esc(q.subject)}</div></div>`:''}
+      ${q.message?`<div class="req-field"><div class="l">Message</div><div class="v" style="white-space:pre-wrap">${esc(q.message)}</div></div>`:''}
+      ${q.issueExplanation?`<div class="req-field"><div class="l">Issue explanation</div><div class="v" style="white-space:pre-wrap">${esc(q.issueExplanation)}</div></div>`:''}
+      ${comps.length?`<div class="req-field"><div class="l">Itinerary (${comps.length})</div>
+        ${comps.map(c=>`<div class="comp"><div class="cact">${esc(c.service||'')}</div><div class="cmeta">${esc(c.activity||'')}</div></div>`).join('')}</div>`:''}
+      <div class="req-field"><div class="l">Message to client (visible on their tracking page)</div>
+        <textarea id="reqClientUpdate" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:9px" placeholder="e.g. Sourcing your car rental, will confirm by Thursday">${esc(q.clientUpdate||'')}</textarea>
+        <button class="btn sm" style="margin-top:8px" onclick="saveClientUpdate('${esc(q.id)}')">Save update</button>
+      </div>
+      <div class="req-field"><div class="l">Internal notes</div>
+        <textarea id="reqInternalNotes" rows="2" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:9px" placeholder="Internal notes">${esc(q.internalNotes||'')}</textarea>
+        <button class="btn sm ghost" style="margin-top:8px" onclick="saveInternalNotes('${esc(q.id)}')">Save notes</button>
+      </div>
+    </div>`;
+}
+function editRequest(id, field, value){
+  if (!FIRE) return;
+  DB.collection(COLL.quotes).doc(id).update({[field]:value}).then(()=>toast('Updated')).catch(e=>{ console.error(e); toast('Could not save — check connection'); });
+}
+function saveClientUpdate(id){
+  const v = document.getElementById('reqClientUpdate').value;
+  editRequest(id, 'clientUpdate', v);
+}
+function saveInternalNotes(id){
+  const v = document.getElementById('reqInternalNotes').value;
+  editRequest(id, 'internalNotes', v);
+}
+
+/* ---------- new-request notifications (foreground/backgrounded tab only —
+   a true notification when the app is fully closed needs push messaging,
+   which is a bigger separate build) ---------- */
+function ensureNotifyPermission(){
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') Notification.requestPermission();
+}
+function notifyNewRequest(q){
+  if (q.status !== 'New') return;
+  const cat = REQUEST_CATEGORIES[q.category] || {label:q.category||'Request'};
+  toast('New request: '+(q.name||'')+' — '+cat.label);
+  if ('Notification' in window && Notification.permission==='granted'){
+    try{
+      const n = new Notification('New ORN request', {body:(q.name||'Someone')+' — '+cat.label+(q.destination?' · '+q.destination:''), tag:q.id});
+      n.onclick = ()=>{ window.focus(); setTab('requests'); openRequest(q.id); n.close(); };
+    }catch(e){ console.warn('Notification failed', e); }
+  }
+}
+
 
 /* ---------- booking detail ---------- */
 function openBooking(id){ const b=state.bookings.find(x=>bid(x)===id); if(!b)return; state.current=id;
