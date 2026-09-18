@@ -408,6 +408,8 @@ function applyContractingOnlyMode(){
   document.querySelectorAll('.topnav button').forEach(b=>{
     if (b.dataset.view!=='contracting') b.style.display='none';
   });
+  const qs = document.querySelector('.quickstrip');
+  if (qs) qs.style.display = 'none';
 }
 function clearSsoSplash(ok){
   try{ document.documentElement.classList.remove('sso'); }catch(e){}
