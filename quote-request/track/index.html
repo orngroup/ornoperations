@@ -50,6 +50,8 @@ input:focus{border-color:#c8102e}
 .field{margin-bottom:14px}
 .field .l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#9aa2b5;font-weight:700}
 .field .v{font-size:14px;color:#1d2433;margin-top:2px}
+.ticket-bookingref{background:#fdecec;color:#1d2433;font-size:12.5px;border-radius:6px;padding:6px 10px;margin-bottom:8px;display:inline-block}
+.ticket-detail{margin-top:12px;padding-top:12px;border-top:1px solid #eceff4}
 .hint{color:#9aa2b5;font-size:11px;margin-top:18px;text-align:center}
 </style>
 </head>
@@ -79,6 +81,7 @@ input:focus{border-color:#c8102e}
   <div class="card hidden" id="dashCard">
     <h1>Your requests</h1>
     <div class="lead" id="dashLead"></div>
+    <input id="dashSearch" type="search" placeholder="Search by reference, booking #, destination…" style="margin-bottom:14px" oninput="filterDashboard()">
     <div id="ticketList"></div>
   </div>
 
@@ -94,6 +97,7 @@ input:focus{border-color:#c8102e}
 
     <div class="result hidden" id="result">
       <span class="status-badge" id="statusBadge"></span>
+      <div class="ticket-bookingref hidden" id="rBookingRefField">Booking / Proposal #: <b id="rBookingRef"></b></div>
       <div class="ticket-countdown" id="rCountdown"></div>
       <div class="field"><div class="l">Request type</div><div class="v" id="rCategory"></div></div>
       <div class="field"><div class="l">Submitted</div><div class="v" id="rSubmitted"></div></div>
@@ -190,6 +194,7 @@ function doLogout(){
 }
 
 /* ============== DASHBOARD: all of this account's tickets ============== */
+let myTickets = [];
 function loadMyTickets(user){
   document.getElementById('dashLead').textContent = 'Logged in as ' + user.email;
   // ownerUid is the reliable match (set on every request submitted since
@@ -203,30 +208,42 @@ function loadMyTickets(user){
     s0.docs.forEach(d=>map[d.id]=d.data());
     s1.docs.forEach(d=>map[d.id]=d.data());
     s2.docs.forEach(d=>map[d.id]=d.data());
-    const tickets = Object.values(map).sort((a,z)=>(z.ts||'').localeCompare(a.ts||''));
-    renderTicketList(tickets);
+    myTickets = Object.values(map).sort((a,z)=>(z.ts||'').localeCompare(a.ts||''));
+    renderTicketList(myTickets);
   }).catch(e=>{
     console.error(e);
     document.getElementById('ticketList').innerHTML = '<div class="err">Could not load your requests — please try again.</div>';
   });
 }
+function filterDashboard(){
+  const q = document.getElementById('dashSearch').value.trim().toLowerCase();
+  if (!q){ renderTicketList(myTickets); return; }
+  const filtered = myTickets.filter(t=>[
+    t.ref, t.id, t.proposalRef, t.ornRef, t.tagRef, t.bookingRef, t.destination, t.subject, t.category
+  ].some(v=>v && String(v).toLowerCase().includes(q)));
+  renderTicketList(filtered);
+}
 function renderTicketList(tickets){
   const el = document.getElementById('ticketList');
-  if (!tickets.length){ el.innerHTML = '<p class="lead">No requests found on this account yet.</p>'; return; }
+  if (!tickets.length){ el.innerHTML = '<p class="lead">No requests found.</p>'; return; }
   el.innerHTML = tickets.map((q,i)=>{
     const status = q.status || 'New';
     const closed = status==='Won' || status==='Lost';
     const submitted = q.ts ? new Date(q.ts).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : '—';
+    const bookingRef = q.proposalRef || q.ornRef || q.tagRef || q.bookingRef || '';
     return `<div class="ticket">
       <div class="ticket-top">
         <div><div class="ticket-ref">${esc(q.ref||q.id)}</div><div class="ticket-cat">${esc(CATEGORY_LABELS[q.category]||q.category||'')}${q.departureDate?' · travel '+new Date(q.departureDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):''}</div></div>
         <span class="status-badge" style="background:${STATUS_COLORS[status]||'#5f6880'}">${esc(status)}</span>
       </div>
+      ${bookingRef?`<div class="ticket-bookingref">Booking / Proposal #: <b>${esc(bookingRef)}</b></div>`:''}
       <div class="ticket-countdown" id="tCountdown_${i}"></div>
       ${q.clientUpdate && q.clientUpdate.trim()
         ? `<div class="ticket-update">${esc(q.clientUpdate)}</div>`
         : `<div class="ticket-no-update">No update posted yet.</div>`}
       <div class="ticket-meta">Submitted ${submitted}</div>
+      <a onclick="toggleTicketDetail(${i})" style="display:inline-block;margin-top:8px;color:#c8102e;font-weight:700;font-size:12px;cursor:pointer">View full details ▾</a>
+      <div class="ticket-detail hidden" id="tDetail_${i}">${ticketDetailHTML(q)}</div>
     </div>`;
   }).join('');
   tickets.forEach((q,i)=>{
@@ -235,6 +252,27 @@ function renderTicketList(tickets){
     const deadline = q.ts ? new Date(q.ts).getTime() + requestSlaHours(q)*3600000 : null;
     renderMiniCountdown('tCountdown_'+i, deadline, closed);
   });
+}
+function toggleTicketDetail(i){
+  const el = document.getElementById('tDetail_'+i);
+  if (el) el.classList.toggle('hidden');
+}
+/* Everything the client is entitled to see about their own request — no
+   pricing, no internal notes, nothing another submitter's data. */
+function ticketDetailHTML(q){
+  const rows = [];
+  if (q.destination) rows.push(['Destination', q.destination]);
+  if (q.subject) rows.push(['Subject', q.subject]);
+  if (q.pax) rows.push(['Pax', q.pax + (q.childAges?' (children: '+q.childAges+')':'')]);
+  if (q.returnDate) rows.push(['Return date', new Date(q.returnDate).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})]);
+  if (q.ornRef) rows.push(['ORN reference', q.ornRef]);
+  if (q.tagRef || q.bookingRef) rows.push(['TAG / booking reference', q.tagRef||q.bookingRef]);
+  if (q.serviceRequired) rows.push(['Service required', q.serviceRequired]);
+  if (q.message) rows.push(['Your message', q.message]);
+  if (q.issueExplanation) rows.push(['Issue explanation', q.issueExplanation]);
+  if (q.components && q.components.length) rows.push(['Itinerary', q.components.map(c=>(c.service||'')+': '+(c.activity||'')).join('; ')]);
+  if (!rows.length) return '<div class="lead">No further details recorded.</div>';
+  return rows.map(([l,v])=>`<div class="field"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('');
 }
 function renderMiniCountdown(elId, deadlineMs, isClosed){
   const el = document.getElementById(elId);
@@ -278,6 +316,10 @@ function renderResult(q){
   const badge = document.getElementById('statusBadge');
   badge.textContent = status;
   badge.style.background = STATUS_COLORS[status] || '#5f6880';
+  const bookingRef = q.proposalRef || q.ornRef || q.tagRef || q.bookingRef || '';
+  const refField = document.getElementById('rBookingRefField');
+  if (bookingRef){ refField.classList.remove('hidden'); document.getElementById('rBookingRef').textContent = bookingRef; }
+  else refField.classList.add('hidden');
   document.getElementById('rCategory').textContent = CATEGORY_LABELS[q.category] || q.category || '—';
   document.getElementById('rSubmitted').textContent = q.ts ? new Date(q.ts).toLocaleString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
   const depField = document.getElementById('rDepartureField');

@@ -13,6 +13,7 @@
 <title>ORN Europe — Ops (Mobile)</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 :root{
   --red:#dc051e; --black:#0a0a0b; --ink:#1a1d21; --muted:#6b7076; --line:#e2e4e6;
@@ -540,6 +541,9 @@ function renderRequestDetail(q){
       <div class="req-field"><div class="l">Status</div>
         <select onchange="editRequest('${esc(q.id)}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select>
       </div>
+      <div class="req-field"><div class="l">Booking / Proposal # (shown to the client)</div>
+        <input id="reqProposalRef" value="${esc(q.proposalRef||'')}" placeholder="e.g. Nexus PRP-1234" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;font-weight:700" onchange="editRequest('${esc(q.id)}','proposalRef',this.value)">
+      </div>
       <div class="req-field"><div class="l">Time left</div><div class="v ${band.key==='crit'?'overdue':''}" style="${band.key==='crit'?'color:#cc3a24;font-weight:700':''}">${esc(band.label)}</div></div>
       <div class="req-field"><div class="l">From</div><div class="v">${esc(q.name||'')} · ${esc(q.email||'')}${q.phone?' · '+esc(q.phone):''}</div></div>
       ${q.agency?`<div class="req-field"><div class="l">Agency / company</div><div class="v">${esc(q.agency)}</div></div>`:''}
@@ -564,7 +568,31 @@ function renderRequestDetail(q){
 }
 function editRequest(id, field, value){
   if (!FIRE) return;
-  DB.collection(COLL.quotes).doc(id).update({[field]:value}).then(()=>toast('Updated')).catch(e=>{ console.error(e); toast('Could not save — check connection'); });
+  DB.collection(COLL.quotes).doc(id).update({[field]:value}).then(()=>{
+    toast('Updated');
+    if (['status','clientUpdate','proposalRef'].includes(field)){
+      const q = state.quotes.find(x=>x.id===id);
+      if (q) sendUpdateNotification({...q, [field]:value});
+    }
+  }).catch(e=>{ console.error(e); toast('Could not save — check connection'); });
+}
+/* Emails the submitter when something client-visible changes — same
+   best-effort EmailJS notification the desktop ops portal sends, so a
+   status/proposal-number update made from mobile also reaches the client. */
+function sendUpdateNotification(q){
+  if (!FIRE || !window.emailjs) return;
+  DB.collection('recon_settings').doc('notify').get().then(d=>{
+    if (!d.exists) return;
+    const ej = (d.data()||{}).emailjs;
+    if (!ej || !ej.serviceId || !ej.updateTemplateId || !ej.publicKey) return;
+    const toEmail = q.replyEmail || q.email; if (!toEmail) return;
+    const cat = REQUEST_CATEGORIES[q.category] || {label:q.category||'Request'};
+    window.emailjs.send(ej.serviceId, ej.updateTemplateId, {
+      to_email: toEmail, client_name: q.name||'', ref: q.ref||q.id, category: cat.label,
+      status: q.status||'New', proposal_ref: q.proposalRef||'', update_message: q.clientUpdate||'',
+      track_url: 'https://orngroup.github.io/ornoperations/quote-request/track/?ref='+encodeURIComponent(q.ref||q.id)
+    }, ej.publicKey).catch(e=>console.error('Update notification failed', e));
+  }).catch(e=>console.error('Could not load notify settings', e));
 }
 function saveClientUpdate(id){
   const v = document.getElementById('reqClientUpdate').value;

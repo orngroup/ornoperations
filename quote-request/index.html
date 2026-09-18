@@ -206,10 +206,11 @@ textarea{min-height:80px;resize:vertical}
         <button class="btn wide" id="crBtn" onclick="doCreateAccount()">Create account &amp; continue</button>
       </div>
       <div class="hint">You can still browse Product &amp; Supply and SLA info without an account — this is only needed to submit a request.</div>
+      <div class="hint">Already submitted a request? <a href="track/" style="color:#c8102e;font-weight:700">Log in to see all your requests and their status →</a></div>
     </div>
 
     <div class="card hidden" id="formCard" style="max-width:760px;margin:0 auto">
-      <div class="loggedin-bar"><span>Logged in as <b id="loggedInAs"></b></span><a onclick="doAcctLogout()">Log out</a></div>
+      <div class="loggedin-bar"><span>Logged in as <b id="loggedInAs"></b></span><span><a href="track/" style="margin-right:14px">My Requests →</a><a onclick="doAcctLogout()">Log out</a></span></div>
       <h1>Send a request</h1>
       <div class="lead">One form for everything — pick the type of request below and it goes straight to the right team, tracked from submission through to resolution. No more email or WhatsApp.</div>
 

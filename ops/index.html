@@ -3202,7 +3202,7 @@ function renderQuotes(){
     </div>
     <div class="hint" style="margin-bottom:10px">Share the request form link with clients/agents/Sales Support instead of email — they pick the request type, it lands here sorted by urgency, and alerts the right inbox (${Object.values(REQUEST_CATEGORIES).map(c=>c.defaultEmail).join(' · ')}). Timer defaults: Quote & loading 72h, Booking admin/Customer 24h, Escalation 4h, Mgmt escalation 8h — edit defaults in Settings, or override per request below.</div>
     <div class="tbl-scroll"><table class="bk static">
-      <thead><tr><th>Type</th><th>Time left</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Special notes</th><th>Status</th><th>Message to client</th><th>Itinerary</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
+      <thead><tr><th>Type</th><th>Time left</th><th>Priority</th><th>Departure</th><th>Client / contact</th><th>Destination / service</th><th>Pax / child ages</th><th>ORN ref</th><th>TAG ref</th><th>Booking/Proposal #</th><th>Special notes</th><th>Status</th><th>Message to client</th><th>Itinerary</th><th>Doc</th><th>Internal notes</th><th></th></tr></thead>
       <tbody>${rows.map(q=>{
         const rc = receiptFor(q.id);
         const cat = categoryMeta(q.category);
@@ -3216,6 +3216,7 @@ function renderQuotes(){
         <td>${esc(q.pax||'—')}${q.childAges?' ('+esc(q.childAges)+')':''}</td>
         <td><input value="${esc(q.ornRef||'')}" placeholder="ORN..." onchange="editQuote('${q.id}','ornRef',this.value)" style="min-width:100px"></td>
         <td><input value="${esc(q.tagRef||q.bookingRef||'')}" placeholder="TAG..." onchange="editQuote('${q.id}','tagRef',this.value)" style="min-width:100px"></td>
+        <td><input value="${esc(q.proposalRef||'')}" placeholder="e.g. Nexus PRP-1234 / booking #" onchange="editQuote('${q.id}','proposalRef',this.value)" style="min-width:140px;font-weight:700"></td>
         <td><input value="${esc(q.specialNotes||'')}" placeholder="Special notes" onchange="editQuote('${q.id}','specialNotes',this.value)" style="min-width:140px"></td>
         <td><select onchange="editQuote('${q.id}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td><textarea placeholder="Visible to the client on their tracking page — e.g. 'Sourcing your car rental, will confirm by Thursday'" onchange="editQuote('${q.id}','clientUpdate',this.value)" style="min-width:160px;min-height:44px;font-size:12px">${esc(q.clientUpdate||'')}</textarea>
@@ -3228,7 +3229,7 @@ function renderQuotes(){
           <button class="btn ghost small" onclick="printQuotePdf('${q.id}')">PDF</button></td>
         <td><input value="${esc(q.internalNotes||'')}" placeholder="Internal notes" onchange="editQuote('${q.id}','internalNotes',this.value)" style="min-width:130px"></td>
         <td><button class="btn danger small" onclick="delQuote('${q.id}')">✕</button></td>
-      </tr>`;}).join('') || '<tr><td colspan="16" class="empty">No requests in this category yet.</td></tr>'}</tbody>
+      </tr>`;}).join('') || '<tr><td colspan="17" class="empty">No requests in this category yet.</td></tr>'}</tbody>
     </table></div>
     <div id="quoteItinerary"></div>`;
   renderQuoteItinerary();
@@ -3237,9 +3238,31 @@ function editQuote(id, f, v){
   const q = state.quotes.find(x=>x.id===id); if (!q) return;
   q[f]=v; saveListItem('quotes', q);
   logActivity(q.name||'-', 'Quote request '+f+' → '+String(v).slice(0,40));
+  // Only fields the client actually sees warrant an email — not internal notes.
+  if (['status','clientUpdate','proposalRef'].includes(f)) sendUpdateNotification(q);
+}
+/* Emails the submitter whenever something client-visible changes on their
+   request (status, a message from the team, or a booking/proposal number
+   being assigned) — separate from the initial submission acknowledgment,
+   since "I never hear back" was specific feedback from TAG USA. Best-effort:
+   silently does nothing if EmailJS isn't configured, same as the ack email. */
+function sendUpdateNotification(q){
+  if (!FIRE || !window.emailjs) return;
+  const ej = state.notify && state.notify.emailjs;
+  if (!ej || !ej.serviceId || !ej.updateTemplateId || !ej.publicKey) return;
+  const toEmail = q.replyEmail || q.email; if (!toEmail) return;
+  const cat = categoryMeta(q.category);
+  window.emailjs.send(ej.serviceId, ej.updateTemplateId, {
+    to_email: toEmail, client_name: q.name||'', ref: q.ref||q.id, category: cat.label,
+    status: q.status||'New', proposal_ref: q.proposalRef||'', update_message: q.clientUpdate||'',
+    track_url: trackingUrl(q.ref||q.id)
+  }, ej.publicKey).catch(e=>console.error('Update notification failed', e));
+}
+function trackingUrl(ref){
+  return 'https://orngroup.github.io/ornoperations/quote-request/track/?ref='+encodeURIComponent(ref);
 }
 function copyTrackingLink(ref){
-  const url = 'https://orngroup.github.io/ornoperations/quote-request/track/?ref='+encodeURIComponent(ref);
+  const url = trackingUrl(ref);
   navigator.clipboard.writeText(url).then(()=>toast('Tracking link copied')).catch(()=>alert(url));
 }
 function delQuote(id){
@@ -5294,9 +5317,10 @@ function renderSettings(){
           if (!ej.publicKey) missing.push('Public Key');
           if (!ej.templateId) missing.push('team alert Template ID');
           if (!ej.ackTemplateId) missing.push('acknowledgment Template ID');
+          if (!ej.updateTemplateId) missing.push('update-notification Template ID');
           return missing.length
-            ? `<div class="hint" style="background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;color:var(--text)">⚠ Not fully configured — missing: ${missing.join(', ')}. No acknowledgment emails will send until all four fields below are filled in and saved.</div>`
-            : `<div class="hint" style="background:var(--gold-bg);border:1px solid var(--ok);border-radius:8px;padding:8px 12px;margin-bottom:8px;color:var(--text)">✅ All four fields are filled in. <button class="btn ghost small" style="margin-left:8px" onclick="sendTestAckEmail()">Send test email</button></div>`;
+            ? `<div class="hint" style="background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;color:var(--text)">⚠ Not fully configured — missing: ${missing.join(', ')}. Acknowledgment/update emails won't send until every field below is filled in and saved.</div>`
+            : `<div class="hint" style="background:var(--gold-bg);border:1px solid var(--ok);border-radius:8px;padding:8px 12px;margin-bottom:8px;color:var(--text)">✅ All fields are filled in. <button class="btn ghost small" style="margin-left:8px" onclick="sendTestAckEmail()">Send test email</button></div>`;
         })()}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           <input id="ejService" style="flex:1;min-width:180px" placeholder="EmailJS Service ID" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.serviceId)||'')}" ${isAdmin?'':'disabled'}>
@@ -5305,6 +5329,7 @@ function renderSettings(){
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           <input id="ejAckTemplate" style="flex:1;min-width:260px" placeholder="EmailJS Template ID (submitter acknowledgment)" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.ackTemplateId)||'')}" ${isAdmin?'':'disabled'}>
+          <input id="ejUpdateTemplate" style="flex:1;min-width:260px" placeholder="EmailJS Template ID (submitter update/response)" value="${esc((state.notify&&state.notify.emailjs&&state.notify.emailjs.updateTemplateId)||'')}" ${isAdmin?'':'disabled'}>
         </div>
         <div class="hint" style="margin-bottom:6px">Routing inboxes — one per request type, per Lisa's email. Escalations always also go to Ken &amp; Ajay directly.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -5432,9 +5457,10 @@ function saveEmailJs(){
   const serviceId = (document.getElementById('ejService')||{}).value?.trim() || '';
   const templateId = (document.getElementById('ejTemplate')||{}).value?.trim() || '';
   const ackTemplateId = (document.getElementById('ejAckTemplate')||{}).value?.trim() || '';
+  const updateTemplateId = (document.getElementById('ejUpdateTemplate')||{}).value?.trim() || '';
   const publicKey = (document.getElementById('ejPublic')||{}).value?.trim() || '';
   state.notify = state.notify || {};
-  state.notify.emailjs = {serviceId, templateId, ackTemplateId, publicKey};
+  state.notify.emailjs = {serviceId, templateId, ackTemplateId, updateTemplateId, publicKey};
   const categoryEmails = {};
   const categorySla = {};
   Object.keys(REQUEST_CATEGORIES).forEach(k=>{
@@ -5453,7 +5479,7 @@ function saveEmailJs(){
    on (or guessing about) a real form submission. */
 function sendTestAckEmail(){
   const ej = (state.notify&&state.notify.emailjs)||{};
-  if (!ej.serviceId || !ej.ackTemplateId || !ej.publicKey){ alert('Fill in and save all four EmailJS fields first.'); return; }
+  if (!ej.serviceId || !ej.ackTemplateId || !ej.publicKey){ alert('Fill in and save the EmailJS fields first.'); return; }
   const to = prompt('Send a test acknowledgment email to:', state.user&&state.user.email || '');
   if (!to) return;
   if (!window.emailjs){ alert('EmailJS script has not loaded — check your connection and reload.'); return; }
