@@ -180,12 +180,6 @@ html.sso body::before{content:'Signing you in\2026';position:fixed;inset:0;displ
     <div class="err" id="loginErr"></div>
     <button class="btn" onclick="doLogin()">Sign in</button>
     <div style="text-align:center;font-size:12px;color:#5f6880;margin-top:10px">TAG USA / Australia teams: <a href="./support/" style="color:#a9801e;font-weight:700">submit a support request →</a></div>
-    <div style="text-align:center;font-size:12px;margin-top:8px"><a onclick="toggleContractingLogin()" style="color:#a9801e;font-weight:700;cursor:pointer">Contracting team access →</a></div>
-    <div id="contractingLoginPanel" class="hidden" style="margin-top:12px;padding-top:12px;border-top:1px solid #e6e9ef">
-      <div class="fld"><label>Name</label><select id="contractingUser">${CONTRACTING_ONLY_USERS.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select></div>
-      <button class="btn" onclick="doContractingLogin()">Enter Contracting</button>
-      <div style="text-align:center;font-size:11px;color:#9aa2b5;margin-top:6px">Hotel target list and contracting status only — no password needed.</div>
-    </div>
   </div>
 </div>
 
@@ -407,25 +401,6 @@ function doLogin(){
   renderAll();
 }
 function doLogout(){ sessionStorage.removeItem('ornhub_user'); sessionStorage.removeItem('orn_sso'); sessionStorage.removeItem('ornhub_contracting_user'); location.reload(); }
-function toggleContractingLogin(){
-  document.getElementById('contractingLoginPanel').classList.toggle('hidden');
-}
-function doContractingLogin(){
-  const id = document.getElementById('contractingUser').value;
-  const found = CONTRACTING_ONLY_USERS.find(u=>u.id===id);
-  if (!found) return;
-  contractingOnlyMode = true;
-  state.user = found;
-  sessionStorage.setItem('ornhub_contracting_user', JSON.stringify({id:found.id}));
-  applyContractingOnlyMode();
-  document.getElementById('loginView').style.display='none';
-  document.getElementById('appView').style.display='block';
-  document.getElementById('userAvatar').textContent = found.id.replace('-C','');
-  document.getElementById('userName').textContent = found.name + ' (Contracting)';
-  logActivity('-','Signed in to Contracting-only access: '+found.name);
-  renderAll();
-  switchView('contracting');
-}
 /* Hides every nav button except Contracting, and switchView() below refuses
    to leave that view for the rest of the session — so this really is
    Contracting-only, not just Contracting-by-default. */
