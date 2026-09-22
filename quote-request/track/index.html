@@ -142,6 +142,19 @@ function requestSlaHours(q){
   return CATEGORY_SLA_DEFAULT[q.category] || 48;
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+/* Stamps that this specific message has actually been viewed — not just
+   sent — so the team can see a genuine "seen" indicator rather than only
+   knowing an email went out. Only writes once per message: skipped if
+   already marked seen since this exact update was set, so opening the
+   page repeatedly doesn't hammer Firestore with writes. */
+function markUpdateSeen(q){
+  if (!q.clientUpdate || !q.clientUpdate.trim()) return;
+  if (!FIRE || !q.id) return;
+  if (q.clientViewedUpdateAt && q.clientUpdateSetAt && q.clientViewedUpdateAt >= q.clientUpdateSetAt) return;
+  const now = new Date().toISOString();
+  q.clientViewedUpdateAt = now;
+  DB.collection('recon_quotes').doc(q.id).update({clientViewedUpdateAt: now}).catch(e=>console.error('Could not mark update seen', e));
+}
 
 /* ============== LOGIN / ACCOUNT ============== */
 let dashboardTimer = null;
@@ -251,6 +264,7 @@ function renderTicketList(tickets){
     const closed = status==='Won' || status==='Lost';
     const deadline = q.ts ? new Date(q.ts).getTime() + requestSlaHours(q)*3600000 : null;
     renderMiniCountdown('tCountdown_'+i, deadline, closed);
+    markUpdateSeen(q);
   });
 }
 function toggleTicketDetail(i){
@@ -335,6 +349,7 @@ function renderResult(q){
   const deadline = q.ts ? new Date(q.ts).getTime() + requestSlaHours(q)*3600000 : null;
   startCountdown(deadline, closed);
   document.getElementById('result').classList.remove('hidden');
+  markUpdateSeen(q);
 }
 function startCountdown(deadlineMs, isClosed){
   const el = document.getElementById('rCountdown');

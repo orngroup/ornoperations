@@ -558,13 +558,25 @@ function renderRequestDetail(q){
         ${comps.map(c=>`<div class="comp"><div class="cact">${esc(c.service||'')}</div><div class="cmeta">${esc(c.activity||'')}</div></div>`).join('')}</div>`:''}
       <div class="req-field"><div class="l">Message to client (visible on their tracking page)</div>
         <textarea id="reqClientUpdate" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:9px" placeholder="e.g. Sourcing your car rental, will confirm by Thursday">${esc(q.clientUpdate||'')}</textarea>
-        <button class="btn sm" style="margin-top:8px" onclick="saveClientUpdate('${esc(q.id)}')">Save update</button>
+        <button class="btn sm" style="margin-top:8px" onclick="saveClientUpdate('${esc(q.id)}')">Save &amp; notify client</button>
+        <div class="req-seen">${clientSeenLabel(q)}</div>
       </div>
       <div class="req-field"><div class="l">Internal notes</div>
         <textarea id="reqInternalNotes" rows="2" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:9px" placeholder="Internal notes">${esc(q.internalNotes||'')}</textarea>
         <button class="btn sm ghost" style="margin-top:8px" onclick="saveInternalNotes('${esc(q.id)}')">Save notes</button>
       </div>
     </div>`;
+}
+/* Shows whether the CURRENT message has actually been viewed on the client's
+   tracking page — not just sent — matching the desktop portal's indicator. */
+function clientSeenLabel(q){
+  if (!q.clientUpdate) return '';
+  if (!q.clientViewedUpdateAt || !q.clientUpdateSetAt || q.clientViewedUpdateAt < q.clientUpdateSetAt){
+    return '<span style="color:#c9973e">● Not yet viewed by client</span>';
+  }
+  const mins = Math.round((Date.now() - new Date(q.clientViewedUpdateAt).getTime())/60000);
+  const ago = mins<60 ? mins+'m ago' : mins<1440 ? Math.round(mins/60)+'h ago' : Math.round(mins/1440)+'d ago';
+  return '<span style="color:#2c9e51">✓ Seen by client '+ago+'</span>';
 }
 function editRequest(id, field, value){
   if (!FIRE) return;
@@ -578,17 +590,23 @@ function editRequest(id, field, value){
 }
 /* Emails the submitter when something client-visible changes — same
    best-effort EmailJS notification the desktop ops portal sends, so a
-   status/proposal-number update made from mobile also reaches the client. */
+   status/proposal-number update made from mobile also reaches the client.
+   Also CCs the routing inbox for that category (from Settings if
+   configured, else the same defaults as the desktop portal), so the team
+   has a copy of exactly what was sent. */
 function sendUpdateNotification(q){
   if (!FIRE || !window.emailjs) return;
   DB.collection('recon_settings').doc('notify').get().then(d=>{
     if (!d.exists) return;
-    const ej = (d.data()||{}).emailjs;
+    const notify = d.data()||{};
+    const ej = notify.emailjs;
     if (!ej || !ej.serviceId || !ej.updateTemplateId || !ej.publicKey) return;
     const toEmail = q.replyEmail || q.email; if (!toEmail) return;
     const cat = REQUEST_CATEGORIES[q.category] || {label:q.category||'Request'};
+    const DEFAULT_CAT_EMAIL = {new_quote:'quoteseu@orn.com', quote:'quoteseu@orn.com', quote_addon:'quoteseu@orn.com', group_quote:'quoteseu@orn.com', support:'supporteu@orn.com', customer:'customereu@orn.com', escalation:'escalationseu@orn.com', management:'escalationseu@orn.com'};
+    const ccEmail = (notify.categoryEmails && notify.categoryEmails[q.category]) || DEFAULT_CAT_EMAIL[q.category] || DEFAULT_CAT_EMAIL.new_quote;
     window.emailjs.send(ej.serviceId, ej.updateTemplateId, {
-      to_email: toEmail, client_name: q.name||'', ref: q.ref||q.id, category: cat.label,
+      to_email: toEmail, cc_email: ccEmail, client_name: q.name||'', ref: q.ref||q.id, category: cat.label,
       status: q.status||'New', proposal_ref: q.proposalRef||'', update_message: q.clientUpdate||'',
       track_url: 'https://orngroup.github.io/ornoperations/quote-request/track/?ref='+encodeURIComponent(q.ref||q.id)
     }, ej.publicKey).catch(e=>console.error('Update notification failed', e));
@@ -596,6 +614,9 @@ function sendUpdateNotification(q){
 }
 function saveClientUpdate(id){
   const v = document.getElementById('reqClientUpdate').value;
+  const q = state.quotes.find(x=>x.id===id);
+  if (q) q.clientUpdateSetAt = new Date().toISOString();
+  if (FIRE) DB.collection(COLL.quotes).doc(id).update({clientUpdateSetAt: new Date().toISOString()}).catch(e=>console.error(e));
   editRequest(id, 'clientUpdate', v);
 }
 function saveInternalNotes(id){

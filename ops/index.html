@@ -3219,7 +3219,9 @@ function renderQuotes(){
         <td><input value="${esc(q.proposalRef||'')}" placeholder="e.g. Nexus PRP-1234 / booking #" onchange="editQuote('${q.id}','proposalRef',this.value)" style="min-width:140px;font-weight:700"></td>
         <td><input value="${esc(q.specialNotes||'')}" placeholder="Special notes" onchange="editQuote('${q.id}','specialNotes',this.value)" style="min-width:140px"></td>
         <td><select onchange="editQuote('${q.id}','status',this.value)">${QUOTE_STATUSES.map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-        <td><textarea placeholder="Visible to the client on their tracking page — e.g. 'Sourcing your car rental, will confirm by Thursday'" onchange="editQuote('${q.id}','clientUpdate',this.value)" style="min-width:160px;min-height:44px;font-size:12px">${esc(q.clientUpdate||'')}</textarea>
+        <td><textarea id="cu_${q.id}" placeholder="Visible to the client on their tracking page — e.g. 'Sourcing your car rental, will confirm by Thursday'" style="min-width:160px;min-height:44px;font-size:12px">${esc(q.clientUpdate||'')}</textarea>
+          <button class="btn small" style="margin-top:4px" onclick="saveClientUpdate('${q.id}')">Save &amp; notify client</button>
+          <div class="hint" style="margin:4px 0 0">${clientSeenLabel(q)}</div>
           <button class="btn ghost small" style="margin-top:4px" onclick="copyTrackingLink('${esc(q.ref||q.id)}')">Copy tracking link</button></td>
         <td><button class="btn ghost small" onclick="openQuoteItinerary('${q.id}')">Itinerary (${(q.components||[]).length})</button>
           ${q.bookingId? `<button class="btn ghost small" onclick="openBooking('${esc(q.bookingId)}')">Open ${esc(q.bookingId)}</button>` : `<button class="btn ghost small" onclick="convertQuoteToBooking('${q.id}')">→ Booking</button>`}</td>
@@ -3241,11 +3243,42 @@ function editQuote(id, f, v){
   // Only fields the client actually sees warrant an email — not internal notes.
   if (['status','clientUpdate','proposalRef'].includes(f)) sendUpdateNotification(q);
 }
+/* Explicit save for the client-update box — desktop had no equivalent to
+   mobile's Save button, so nothing confirmed the save had happened and
+   Enter/Esc understandably looked like they did nothing (Enter just adds a
+   line in a textarea; there was never a submit action bound to either key). */
+function saveClientUpdate(id){
+  const q = state.quotes.find(x=>x.id===id); if (!q) return;
+  const el = document.getElementById('cu_'+id);
+  if (!el) return;
+  q.clientUpdate = el.value;
+  q.clientUpdateSetAt = new Date().toISOString();
+  saveListItem('quotes', q);
+  logActivity(q.name||'-', 'Quote request clientUpdate → '+String(el.value).slice(0,40));
+  sendUpdateNotification(q);
+  toast('Saved — client notified'+((state.notify&&state.notify.emailjs&&state.notify.emailjs.updateTemplateId)?'':' (email not yet configured — see Settings)'));
+  renderQuotes();
+}
+/* Shows whether the CURRENT message has actually been viewed — not just
+   sent. Stamped by the client's own tracking page when it renders this
+   update, so "seen" only lights up once compared against when this
+   specific message was set, not a stale view of an older one. */
+function clientSeenLabel(q){
+  if (!q.clientUpdate) return '';
+  if (!q.clientViewedUpdateAt || !q.clientUpdateSetAt || q.clientViewedUpdateAt < q.clientUpdateSetAt){
+    return '<span style="color:var(--warn)">● Not yet viewed by client</span>';
+  }
+  const mins = Math.round((Date.now() - new Date(q.clientViewedUpdateAt).getTime())/60000);
+  const ago = mins<60 ? mins+'m ago' : mins<1440 ? Math.round(mins/60)+'h ago' : Math.round(mins/1440)+'d ago';
+  return '<span style="color:var(--ok)">✓ Seen by client '+ago+'</span>';
+}
 /* Emails the submitter whenever something client-visible changes on their
    request (status, a message from the team, or a booking/proposal number
    being assigned) — separate from the initial submission acknowledgment,
-   since "I never hear back" was specific feedback from TAG USA. Best-effort:
-   silently does nothing if EmailJS isn't configured, same as the ack email. */
+   since "I never hear back" was specific feedback from TAG USA. Also CCs
+   the routing inbox for that category, so the team has a copy of exactly
+   what was sent rather than no visibility at all. Best-effort: silently
+   does nothing if EmailJS isn't configured, same as the ack email. */
 function sendUpdateNotification(q){
   if (!FIRE || !window.emailjs) return;
   const ej = state.notify && state.notify.emailjs;
@@ -3253,7 +3286,7 @@ function sendUpdateNotification(q){
   const toEmail = q.replyEmail || q.email; if (!toEmail) return;
   const cat = categoryMeta(q.category);
   window.emailjs.send(ej.serviceId, ej.updateTemplateId, {
-    to_email: toEmail, client_name: q.name||'', ref: q.ref||q.id, category: cat.label,
+    to_email: toEmail, cc_email: categoryEmail(q.category||'quote'), client_name: q.name||'', ref: q.ref||q.id, category: cat.label,
     status: q.status||'New', proposal_ref: q.proposalRef||'', update_message: q.clientUpdate||'',
     track_url: trackingUrl(q.ref||q.id)
   }, ej.publicKey).catch(e=>console.error('Update notification failed', e));
@@ -5340,7 +5373,7 @@ function renderSettings(){
           ${Object.entries(REQUEST_CATEGORIES).map(([k,c])=>`<span style="display:flex;align-items:center;gap:4px;min-width:140px"><input id="catSla_${k}" type="number" min="1" style="width:60px" value="${esc(categorySlaHours(k))}" ${isAdmin?'':'disabled'}><span class="hint" style="margin:0">h ${esc(c.short)}</span></span>`).join('')}
           ${isAdmin?`<button class="btn small" onclick="saveEmailJs()">Save</button>`:''}
         </div>
-        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service, and two templates: a <b>team alert</b> template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>; and an <b>acknowledgment</b> template (sent back to whoever submitted the form) with variables <code>to_email, client_name, ref, category, expected_by, track_url</code> — add <code>{{track_url}}</code> as a link in the template so they can check status any time without emailing back. Paste the service ID, public key and both template IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email either way.</div>
+        <div class="hint">This is a static site with no mail server of its own, so email alerts go out via <a href="https://www.emailjs.com/" target="_blank" rel="noopener">EmailJS</a> (free tier) rather than a normal inbox integration. Create a free account, add an email service, and three templates: a <b>team alert</b> template with variables <code>to_email, category, client_name, client_email, departure_date, priority, sla_hours, destination, service_required, orn_ref, tag_ref, message</code>; an <b>acknowledgment</b> template (sent back to whoever submitted the form) with variables <code>to_email, client_name, ref, category, expected_by, track_url</code> — add <code>{{track_url}}</code> as a link so they can check status any time without emailing back; and an <b>update</b> template (sent whenever status, the client message, or the booking/proposal # changes) with variables <code>to_email, cc_email, client_name, ref, category, status, proposal_ref, update_message, track_url</code> — add <code>{{cc_email}}</code> as a CC field in that template so the team gets a copy of exactly what was sent, not just the client. Paste the service ID, public key and all three template IDs above. Until this is filled in, new requests still log here and post to Slack (if configured) but won't send an email either way.</div>
         <div class="section-lbl">Email client (this device)</div>
         <select onchange="localStorage.setItem('ornrecon_mailclient', this.value);">
           ${[['','Not set - ask me next time'],['outlook','Outlook (desktop app)'],['outlookweb','Outlook on the web'],['gmail','Gmail (web)'],['applemail','Apple Mail / system default'],['copy','Other webmail - copy to clipboard']].map(([v,l])=>`<option value="${v}" ${(localStorage.getItem('ornrecon_mailclient')||'')===v?'selected':''}>${l}</option>`).join('')}
